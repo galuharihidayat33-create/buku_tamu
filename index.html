@@ -14,23 +14,33 @@
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 
 <!-- Loader html5-qrcode dgn fallback CDN + flag siap -->
+<!-- html5-qrcode: load locally (no CDN) -->
+<script src="./vendor/html5-qrcode.min.js"></script>
+
+<!-- OPTIONAL fallback kalau file lokal gagal (mis. path salah) -->
 <script>
-(function(){
-  const cdns = [
-    "https://unpkg.com/html5-qrcode@2.3.10/minified/html5-qrcode.min.js",
-    "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.10/minified/html5-qrcode.min.js"
-  ];
-  function loadNext(i){
-    if (i >= cdns.length) { window.__H5Q_LOAD_ERR = true; return; }
-    const s = document.createElement("script");
-    s.src = cdns[i]; s.defer = true; s.crossOrigin = "anonymous";
-    s.onload = () => { window.__H5Q_READY = true; };
-    s.onerror = () => loadNext(i+1);
+  if (!window.Html5Qrcode) {
+    var s = document.createElement('script');
+    s.src = "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.10/minified/html5-qrcode.min.js";
+    s.defer = true;
+    s.onload = () => window.__H5Q_READY = true;
     document.head.appendChild(s);
+  } else {
+    window.__H5Q_READY = true;
   }
-  loadNext(0);
-})();
+  // helper tetap boleh dipakai
+  function waitForH5Q(timeout=5000){
+    return new Promise((resolve)=> {
+      const t0 = Date.now();
+      (function tick(){
+        if (window.__H5Q_READY || window.Html5Qrcode) return resolve();
+        if (Date.now()-t0 > timeout) return resolve();
+        setTimeout(tick, 60);
+      })();
+    });
+  }
 </script>
+
 
 <!-- Secure check + polyfill + helper tunggu library -->
 <script>
