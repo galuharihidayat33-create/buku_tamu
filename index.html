@@ -1,336 +1,300 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RSVP + Buku Tamu (Nama & Nomor dalam QR)</title>
-  <!-- Tailwind -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- ZXing (scanner) -->
-  <script src="https://unpkg.com/@zxing/browser@latest"></script>
-  <!-- QRCode.js (generator QR) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <!-- JsBarcode (generator Code128) -->
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-  <style>
-    #videoPreview{aspect-ratio:16/9;object-fit:cover;border-radius:1rem}
-    canvas,img{image-rendering:crisp-edges}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RSVP + Buku Tamu (FIXED – html5-qrcode)</title>
+
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- QR Generator -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- Barcode Generator (opsional) -->
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<!-- HTML5-QR Code (Scanner yang stabil) -->
+<script src="https://unpkg.com/html5-qrcode@2.3.10/minified/html5-qrcode.min.js"></script>
+
+<style>
+  canvas, img { image-rendering: crisp-edges; }
+  .badge { padding:2px 8px; border-radius:999px; font-size:12px }
+</style>
 </head>
 <body class="bg-slate-50 text-slate-900">
-  <div class="max-w-6xl mx-auto p-4 md:p-8">
-    <header class="flex items-center justify-between mb-6">
-      <div>
-        <h1 class="text-2xl md:text-3xl font-semibold">RSVP + Buku Tamu</h1>
-        <p class="text-sm text-slate-500">Isi RSVP → generate QR berisi <b>Nama & Nomor Tamu</b> (+ token). Simpan, unduh, & scan saat acara.</p>
+<div class="max-w-6xl mx-auto p-4 md:p-8">
+  <header class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl md:text-3xl font-semibold">RSVP + Buku Tamu (FIXED)</h1>
+      <p class="text-sm text-slate-500">
+        Isi RSVP → generate QR berisi <b>Nama & Nomor</b> (plus token). Data tersimpan di IndexedDB. Scan saat acara.
+      </p>
+      <div id="secureWarn" class="mt-2 hidden">
+        <span class="badge bg-rose-100 text-rose-700 ring-1 ring-rose-200">PENTING</span>
+        <span class="text-sm text-rose-700">Jalankan di HTTPS atau http://localhost agar kamera bisa dipakai.</span>
       </div>
-      <div class="flex items-center gap-2">
-        <button id="exportCsvBtn" class="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Export CSV</button>
-        <button id="clearAllBtn" class="px-4 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700">Hapus Semua</button>
-      </div>
-    </header>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="exportCsvBtn" class="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Export CSV</button>
+      <button id="clearAllBtn" class="px-4 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700">Hapus Semua</button>
+    </div>
+  </header>
 
-    <!-- ===== RSVP Form (UNTUK TAMU) ===== -->
-    <section class="grid md:grid-cols-2 gap-6">
-      <div class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
-        <h2 class="text-lg font-semibold mb-3">Form RSVP (Tamu)</h2>
-        <form id="rsvpForm" class="grid gap-3">
-          <label class="block">
-            <span class="text-sm text-slate-600">Nama Tamu</span>
-            <input id="rsvpNama" type="text" required placeholder="Contoh: Bapak/Ibu Andi Wijaya"
-                   class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
-          </label>
+  <!-- ========== RSVP (untuk tamu) ========== -->
+  <section class="grid md:grid-cols-2 gap-6">
+    <div class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
+      <h2 class="text-lg font-semibold mb-3">Form RSVP (Tamu)</h2>
+      <form id="rsvpForm" class="grid gap-3">
+        <label class="block">
+          <span class="text-sm text-slate-600">Nama Tamu</span>
+          <input id="rsvpNama" type="text" required placeholder="Contoh: Bapak/Ibu Andi Wijaya"
+                 class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
+        </label>
 
-          <div class="grid md:grid-cols-3 gap-3">
-            <label class="block md:col-span-2">
-              <span class="text-sm text-slate-600">Nomor Tamu</span>
-              <input id="rsvpNomor" type="number" min="1" placeholder="Contoh: 105"
-                     class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
-            </label>
-            <label class="inline-flex items-center gap-2 mt-6">
-              <input id="autoNomor" type="checkbox" class="size-4" checked />
-              <span class="text-sm text-slate-700">Auto nomor</span>
-            </label>
-          </div>
-
-          <div class="grid md:grid-cols-2 gap-3">
-            <label class="block">
-              <span class="text-sm text-slate-600">No. HP (opsional)</span>
-              <input id="rsvpTelp" type="tel" placeholder="08xxxxxxxxxx"
-                     class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
-            </label>
-            <label class="block">
-              <span class="text-sm text-slate-600">Keterangan (opsional)</span>
-              <input id="rsvpCatatan" type="text" placeholder="Instansi/Relasi"
-                     class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
-            </label>
-          </div>
-
-          <details class="rounded-lg bg-slate-50 ring-1 ring-slate-200 p-3">
-            <summary class="text-sm cursor-pointer select-none">Pengaturan URL Undangan (opsional)</summary>
-            <div class="pt-2 grid gap-2">
-              <label class="block">
-                <span class="text-sm text-slate-600">INVITE_BASE_URL</span>
-                <input id="baseUrl" type="url" placeholder="https://domain-anda.com/undangan"
-                       class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
-              </label>
-              <p class="text-xs text-slate-500">Jika diisi, QR berisi URL: <code>?rsvp=TOKEN&amp;n=Nama&amp;g=Nomor</code></p>
-            </div>
-          </details>
-
-          <div class="flex items-center gap-3 mt-1">
-            <button class="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700" type="submit">Kirim RSVP & Buat QR</button>
-            <span id="rsvpStatus" class="text-sm text-slate-500"></span>
-          </div>
-        </form>
-
-        <!-- Preview QR -->
-        <div id="previewWrap" class="mt-4 grid md:grid-cols-2 gap-3 items-start">
-          <div class="rounded-xl ring-1 ring-slate-200 p-3">
-            <div class="text-sm text-slate-600 mb-1">QR/Barcode Preview</div>
-            <div class="flex items-center gap-3 mb-2">
-              <label class="inline-flex items-center gap-2">
-                <input type="radio" name="qrtype" value="qr" checked class="size-4"/>
-                <span class="text-sm">QR Code</span>
-              </label>
-              <label class="inline-flex items-center gap-2">
-                <input type="radio" name="qrtype" value="code128" class="size-4"/>
-                <span class="text-sm">Barcode Code128</span>
-              </label>
-            </div>
-            <div id="qrContainer" class="flex items-center justify-center min-h-[260px]"></div>
-            <div class="flex items-center gap-3 mt-2">
-              <button id="downloadQrBtn" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700" disabled>Download PNG</button>
-            </div>
-          </div>
-          <div class="rounded-xl ring-1 ring-slate-200 p-3">
-            <div class="text-sm text-slate-600 mb-1">Payload</div>
-            <div id="payloadBox" class="text-xs font-mono break-all">—</div>
-            <div class="text-xs text-slate-500 mt-2">Token: <span id="tokenBox" class="font-mono">—</span></div>
-            <div class="text-xs text-slate-500">Nama: <span id="nameBox" class="font-mono">—</span></div>
-            <div class="text-xs text-slate-500">Nomor: <span id="numBox" class="font-mono">—</span></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== Scanner untuk Panitia ===== -->
-      <div class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-lg font-semibold">Scanner Kamera (Panitia)</h2>
-          <span class="text-xs text-slate-500">Gunakan HTTPS/localhost untuk izin kamera</span>
-        </div>
-
-        <div class="grid md:grid-cols-2 gap-3 mb-3">
-          <label class="block">
-            <span class="text-sm text-slate-600">Pilih Kamera</span>
-            <select id="cameraSelect" class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"></select>
-          </label>
-          <label class="block">
-            <span class="text-sm text-slate-600">Mode</span>
-            <select id="scanMode" class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500">
-              <option value="qr+barcode">QR + Barcode</option>
-              <option value="qr-only">QR saja</option>
-              <option value="barcode-only">Barcode saja</option>
-            </select>
-          </label>
-        </div>
-
-        <video id="videoPreview" class="w-full bg-black/5 ring-1 ring-slate-200"></video>
-
-        <div class="flex items-center gap-3 mt-4">
-          <button id="startBtn" class="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700">Mulai Scan</button>
-          <button id="stopBtn" class="px-4 py-2 rounded-xl bg-slate-700 text-white hover:bg-slate-800">Stop</button>
-          <label class="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 cursor-pointer hover:bg-slate-200">
-            <input id="fileInput" type="file" accept="image/*" class="hidden" />
-            <span class="text-sm">Scan dari Gambar</span>
-          </label>
-        </div>
-
-        <div class="mt-4 p-3 rounded-xl bg-slate-50 ring-1 ring-slate-200">
-          <div class="text-sm text-slate-600">Hasil terakhir:</div>
-          <div id="lastResult" class="mt-1 font-mono text-sm break-all text-emerald-700">—</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== Form Panitia Simpan/Hadir ===== -->
-    <section class="mt-8 rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
-      <h2 class="text-lg font-semibold mb-3">Detail Tamu (Panitia)</h2>
-      <form id="guestForm" class="grid grid-cols-1 gap-3">
         <div class="grid md:grid-cols-3 gap-3">
-          <label class="block">
-            <span class="text-sm text-slate-600">Token</span>
-            <input id="barcodeValue" type="text" required placeholder="Terisi dari scan/RSVP"
-                   class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
-          </label>
-          <label class="block">
+          <label class="block md:col-span-2">
             <span class="text-sm text-slate-600">Nomor Tamu</span>
-            <input id="nomorTamu" type="number" min="1" placeholder="Nomor"
+            <input id="rsvpNomor" type="number" min="1" placeholder="Contoh: 105"
                    class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
           </label>
-          <label class="block">
-            <span class="text-sm text-slate-600">Nama</span>
-            <input id="nama" type="text" placeholder="Nama Tamu"
-                   class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
+          <label class="inline-flex items-center gap-2 mt-6">
+            <input id="autoNomor" type="checkbox" class="size-4" checked />
+            <span class="text-sm text-slate-700">Auto nomor</span>
           </label>
         </div>
 
         <div class="grid md:grid-cols-2 gap-3">
           <label class="block">
             <span class="text-sm text-slate-600">No. HP (opsional)</span>
-            <input id="telp" type="tel" placeholder="08xxxxxxxxxx"
+            <input id="rsvpTelp" type="tel" placeholder="08xxxxxxxxxx"
                    class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
           </label>
           <label class="block">
             <span class="text-sm text-slate-600">Keterangan (opsional)</span>
-            <input id="catatan" type="text" placeholder="Instansi/Relasi"
+            <input id="rsvpCatatan" type="text" placeholder="Instansi/Relasi"
                    class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
           </label>
         </div>
 
+        <details class="rounded-lg bg-slate-50 ring-1 ring-slate-200 p-3">
+          <summary class="text-sm cursor-pointer select-none">Pengaturan URL Undangan (opsional)</summary>
+          <div class="pt-2 grid gap-2">
+            <label class="block">
+              <span class="text-sm text-slate-600">INVITE_BASE_URL</span>
+              <input id="baseUrl" type="url" placeholder="https://galuharihidayat33-create.github.io/buku_tamu/"
+                     class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
+            </label>
+            <p class="text-xs text-slate-500">Jika diisi, QR berisi URL: <code>?rsvp=TOKEN&amp;n=Nama&amp;g=Nomor</code></p>
+          </div>
+        </details>
+
         <div class="flex items-center gap-3 mt-1">
-          <button class="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" type="submit">Simpan/Perbarui</button>
-          <button id="markPresentBtn" class="px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700" type="button">Simpan + Hadir</button>
-          <span id="statusMsg" class="text-sm text-slate-500"></span>
+          <button class="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700" type="submit">Kirim RSVP & Buat QR</button>
+          <span id="rsvpStatus" class="text-sm text-slate-500"></span>
         </div>
       </form>
-    </section>
 
-    <!-- ===== Tabel Riwayat ===== -->
-    <section class="mt-8 rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
+      <!-- Preview QR/Barcode -->
+      <div id="previewWrap" class="mt-4 grid md:grid-cols-2 gap-3 items-start">
+        <div class="rounded-xl ring-1 ring-slate-200 p-3">
+          <div class="text-sm text-slate-600 mb-1">QR/Barcode Preview</div>
+          <div class="flex items-center gap-3 mb-2">
+            <label class="inline-flex items-center gap-2">
+              <input type="radio" name="qrtype" value="qr" checked class="size-4"/>
+              <span class="text-sm">QR Code</span>
+            </label>
+            <label class="inline-flex items-center gap-2">
+              <input type="radio" name="qrtype" value="code128" class="size-4"/>
+              <span class="text-sm">Barcode Code128</span>
+            </label>
+          </div>
+          <div id="qrContainer" class="flex items-center justify-center min-h-[260px]"></div>
+          <div class="flex items-center gap-3 mt-2">
+            <button id="downloadQrBtn" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700" disabled>Download PNG</button>
+          </div>
+        </div>
+        <div class="rounded-xl ring-1 ring-slate-200 p-3">
+          <div class="text-sm text-slate-600 mb-1">Payload</div>
+          <div id="payloadBox" class="text-xs font-mono break-all">—</div>
+          <div class="text-xs text-slate-500 mt-2">Token: <span id="tokenBox" class="font-mono">—</span></div>
+          <div class="text-xs text-slate-500">Nama: <span id="nameBox" class="font-mono">—</span></div>
+          <div class="text-xs text-slate-500">Nomor: <span id="numBox" class="font-mono">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== Scanner (Panitia) – html5-qrcode ========== -->
+    <div class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-lg font-semibold">Riwayat Buku Tamu</h2>
-        <input id="searchInput" type="text" placeholder="Cari nama/nomor/token..." class="w-56 rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500" />
+        <h2 class="text-lg font-semibold">Scanner Kamera (Panitia)</h2>
+        <span class="text-xs text-slate-500">HTTPS/localhost + Allow camera</span>
       </div>
-      <div class="overflow-x-auto">
-        <table class="min-w-full text-sm">
-          <thead class="bg-slate-50">
-            <tr class="text-left">
-              <th class="px-3 py-2">Waktu</th>
-              <th class="px-3 py-2">Token</th>
-              <th class="px-3 py-2">Nomor</th>
-              <th class="px-3 py-2">Nama</th>
-              <th class="px-3 py-2">HP</th>
-              <th class="px-3 py-2">Keterangan</th>
-              <th class="px-3 py-2">Status</th>
-              <th class="px-3 py-2">Aksi</th>
-            </tr>
-          </thead>
-          <tbody id="tableBody"></tbody>
-        </table>
+
+      <div class="grid md:grid-cols-2 gap-3 mb-3">
+        <label class="block">
+          <span class="text-sm text-slate-600">Pilih Kamera</span>
+          <select id="cameraSelect" class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"></select>
+        </label>
+        <label class="block">
+          <span class="text-sm text-slate-600">Scan dari Gambar</span>
+          <input id="fileInput" type="file" accept="image/*" class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500" />
+        </label>
       </div>
-    </section>
 
-    <footer class="text-center text-xs text-slate-500 mt-8">
-      <p>Data disimpan lokal (IndexedDB). Atur <code>REMOTE_POST_URL</code> & <code>INVITE_BASE_URL</code> di skrip bila perlu sinkron server.</p>
-    </footer>
-  </div>
+      <div id="reader" class="w-full rounded-xl ring-1 ring-slate-200 bg-black/5 min-h-[260px] flex items-center justify-center text-slate-500">
+        <span class="text-sm">Klik “Mulai Scan” untuk menyalakan kamera</span>
+      </div>
 
-  <script>
-    // ==========================
-    // KONFIGURASI
-    // ==========================
-    const REMOTE_POST_URL = ""; // contoh: Google Apps Script Web App
-    let INVITE_BASE_URL = "";   // bisa diisi dari input baseUrl
+      <div class="flex items-center gap-3 mt-4">
+        <button id="startBtn" class="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700">Mulai Scan</button>
+        <button id="stopBtn" class="px-4 py-2 rounded-xl bg-slate-700 text-white hover:bg-slate-800">Stop</button>
+        <button id="testCamBtn" class="px-4 py-2 rounded-xl bg-amber-600 text-white hover:bg-amber-700">Test Kamera</button>
+        <span id="scanStatus" class="ml-auto text-sm text-slate-500"></span>
+      </div>
 
-    // ==========================
-    // UTIL
-    // ==========================
-    const { BrowserMultiFormatReader, NotFoundException, BarcodeFormat, DecodeHintType } = ZXing;
-    const two = (n)=>String(n).padStart(2,"0");
-    const isoToLocal = (iso)=>{const d=new Date(iso);return `${two(d.getDate())}/${two(d.getMonth()+1)}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}`;}
-    const slugify = (s)=>s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,32);
-    const rndToken = (len=8)=>Array.from(crypto.getRandomValues(new Uint32Array(len)),n=>(n%36).toString(36)).join('');
+      <div class="mt-4 p-3 rounded-xl bg-slate-50 ring-1 ring-slate-200">
+        <div class="text-sm text-slate-600">Hasil terakhir:</div>
+        <div id="lastResult" class="mt-1 font-mono text-sm break-all text-emerald-700">—</div>
+      </div>
+    </div>
+  </section>
 
-    function buildTokenFromNameAndNumber(name, nomor){
-      const s = slugify(name||"tamu");
-      return `${s}-${nomor||"x"}-${rndToken(4)}`;
-    }
+  <!-- ========== Form Panitia ========== -->
+  <section class="mt-8 rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
+    <h2 class="text-lg font-semibold mb-3">Detail Tamu (Panitia)</h2>
+    <form id="guestForm" class="grid grid-cols-1 gap-3">
+      <div class="grid md:grid-cols-3 gap-3">
+        <label class="block">
+          <span class="text-sm text-slate-600">Token</span>
+          <input id="barcodeValue" type="text" required placeholder="Terisi dari scan/RSVP"
+                 class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
+        </label>
+        <label class="block">
+          <span class="text-sm text-slate-600">Nomor Tamu</span>
+          <input id="nomorTamu" type="number" min="1" placeholder="Nomor"
+                 class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
+        </label>
+        <label class="block">
+          <span class="text-sm text-slate-600">Nama</span>
+          <input id="nama" type="text" placeholder="Nama Tamu"
+                 class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
+        </label>
+      </div>
 
-    function buildPayload(token, name, nomor){
-      if (INVITE_BASE_URL) {
-        const u = new URL(INVITE_BASE_URL);
-        u.searchParams.set("rsvp", token);
-        if (name) u.searchParams.set("n", name);
-        if (nomor!=null && nomor!=="") u.searchParams.set("g", nomor);
-        return u.toString();
-      }
-      // format fallback berisi nama & nomor (sesuai permintaan)
-      return `RSVP2|${token}|${encodeURIComponent(name||"")}|${encodeURIComponent(String(nomor||""))}`;
-    }
+      <div class="grid md:grid-cols-2 gap-3">
+        <label class="block">
+          <span class="text-sm text-slate-600">No. HP (opsional)</span>
+          <input id="telp" type="tel" placeholder="08xxxxxxxxxx"
+                 class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
+        </label>
+        <label class="block">
+          <span class="text-sm text-slate-600">Keterangan (opsional)</span>
+          <input id="catatan" type="text" placeholder="Instansi/Relasi"
+                 class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
+        </label>
+      </div>
 
-    // Parser hasil scan: dukung URL (?rsvp,&n,&g), RSVP2, RSVP lama
-    function parseScanned(text){
-      try {
-        const u = new URL(text);
-        const tok = u.searchParams.get("rsvp");
-        if (tok) {
-          return {
-            token: tok,
-            name: u.searchParams.get("n") || "",
-            nomor: u.searchParams.get("g") || ""
-          };
-        }
-      } catch {}
-      const m2 = /^RSVP2\|([^|]+)\|([^|]*)\|([^|]*)$/i.exec(text||"");
-      if (m2) return { token:m2[1], name: decodeURIComponent(m2[2]||""), nomor: decodeURIComponent(m2[3]||"") };
-      const m = /^RSVP\|([^|]+)\|?(.*)$/i.exec(text||"");
-      if (m) return { token:m[1], name: decodeURIComponent(m[2]||""), nomor: "" };
-      return { token:text, name:"", nomor:"" };
-    }
+      <div class="flex items-center gap-3 mt-1">
+        <button class="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" type="submit">Simpan/Perbarui</button>
+        <button id="markPresentBtn" class="px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700" type="button">Simpan + Hadir</button>
+        <span id="statusMsg" class="text-sm text-slate-500"></span>
+      </div>
+    </form>
+  </section>
 
-    function beepOK(){ try{ const ctx=new (window.AudioContext||window.webkitAudioContext)(); const o=ctx.createOscillator(), g=ctx.createGain();
-      o.type="square"; o.frequency.value=880; o.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(0.05, ctx.currentTime); o.start();
-      setTimeout(()=>{o.stop();ctx.close();},120);}catch{} }
+  <!-- ========== Tabel Riwayat ========== -->
+  <section class="mt-8 rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-lg font-semibold">Riwayat Buku Tamu</h2>
+      <input id="searchInput" type="text" placeholder="Cari nama/nomor/token..." class="w-56 rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500" />
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50">
+          <tr class="text-left">
+            <th class="px-3 py-2">Waktu</th>
+            <th class="px-3 py-2">Token</th>
+            <th class="px-3 py-2">Nomor</th>
+            <th class="px-3 py-2">Nama</th>
+            <th class="px-3 py-2">HP</th>
+            <th class="px-3 py-2">Keterangan</th>
+            <th class="px-3 py-2">Status</th>
+            <th class="px-3 py-2">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </section>
 
-    // ==========================
-    // IndexedDB (v2 menambah kolom "nomor")
-    // ==========================
-    const DB_NAME="bukuTamuDB", STORE="tamu"; let db=null;
-    function openDB(){
-      return new Promise((resolve,reject)=>{
-        const req = indexedDB.open(DB_NAME, 2); // versi 2
-        req.onupgradeneeded = () => {
-          const _db = req.result;
-          let s;
-          if (!_db.objectStoreNames.contains(STORE)) {
-            s = _db.createObjectStore(STORE, { keyPath:"id", autoIncrement:true });
-          } else {
-            s = req.transaction.objectStore(STORE);
-          }
-          if (!s.indexNames.contains("barcode")) try { s.createIndex("barcode","barcode",{unique:false}); } catch{}
-          if (!s.indexNames.contains("waktu")) try { s.createIndex("waktu","waktu",{unique:false}); } catch{}
-          if (!s.indexNames.contains("nomor")) try { s.createIndex("nomor","nomor",{unique:false}); } catch{}
-        };
-        req.onsuccess = ()=>resolve(req.result);
-        req.onerror = ()=>reject(req.error);
-      });
-    }
-    const txStore = (mode)=>db.transaction(STORE,mode).objectStore(STORE);
-    const addEntry  = (e)=>new Promise((res,rej)=>{const q=txStore("readwrite").add(e); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);});
-    const putEntry  = (e)=>new Promise((res,rej)=>{const q=txStore("readwrite").put(e); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);});
-    const getAll    = ()=>new Promise((res,rej)=>{const q=txStore("readonly").getAll(); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);});
-    const getById   = (id)=>new Promise((res,rej)=>{const q=txStore("readonly").get(id); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);});
-    const findByBarcode = (b)=>new Promise((res,rej)=>{const q=txStore("readonly").index("barcode").getAll(b); q.onsuccess=()=>res(q.result||[]); q.onerror=()=>rej(q.error);});
-    const delById   = (id)=>new Promise((res,rej)=>{const q=txStore("readwrite").delete(id); q.onsuccess=()=>res(true); q.onerror=()=>rej(q.error);});
-    const clearAll  = ()=>new Promise((res,rej)=>{const q=txStore("readwrite").clear(); q.onsuccess=()=>res(true); q.onerror=()=>rej(q.error);});
+  <footer class="text-center text-xs text-slate-500 mt-8">
+    <p>Jalankan di HTTPS/localhost. Data lokal (IndexedDB). Atur <code>INVITE_BASE_URL</code> jika ingin payload berupa URL undangan.</p>
+  </footer>
+</div>
 
-    async function getNextNomor(){
-      const rows = await getAll();
-      const nums = rows.map(r => Number(r.nomor)).filter(n => Number.isFinite(n));
-      return (nums.length ? Math.max(...nums)+1 : 1);
-    }
+<script>
+/* ================== KONFIG & UTIL ================== */
+let INVITE_BASE_URL = ""; // diambil dari input baseUrl saat submit RSVP
+const two = n => String(n).padStart(2,"0");
+const isoToLocal = iso => { const d=new Date(iso); return `${two(d.getDate())}/${two(d.getMonth()+1)}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}`; };
+const slugify = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,32);
+const rndToken = (len=8)=>Array.from(crypto.getRandomValues(new Uint32Array(len)),n=>(n%36).toString(36)).join('');
+function beepOK(){try{const ctx=new (window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator(),g=ctx.createGain();o.type="square";o.frequency.value=880;o.connect(g);g.connect(ctx.destination);g.gain.setValueAtTime(0.05,ctx.currentTime);o.start();setTimeout(()=>{o.stop();ctx.close();},120);}catch{}}
+if (!(location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+  document.getElementById("secureWarn").classList.remove("hidden");
+}
 
-    // ==========================
-    // TABEL
-    // ==========================
-    function renderTable(rows){
-      const q=(document.getElementById("searchInput").value||"").toLowerCase();
-      const tb=document.getElementById("tableBody"); tb.innerHTML="";
-      rows.filter(r=>{
-        if(!q) return true;
-        return (r.nama||"").toLowerCase().includes(q) || (r.barcode||"").toLowerCase().includes(q) || String(r.nomor||"").includes(q);
-      }).sort((a,b)=>new Date(b.waktu)-new Date(a.waktu)).forEach(r=>{
+/* ================== PAYLOAD ================== */
+function buildToken(name, nomor){ return `${slugify(name||"tamu")}-${nomor||"x"}-${rndToken(4)}`; }
+function buildPayload(token, name, nomor){
+  if (INVITE_BASE_URL) {
+    const u = new URL(INVITE_BASE_URL);
+    u.searchParams.set("rsvp", token);
+    if (name)  u.searchParams.set("n", name);
+    if (nomor !== "" && nomor != null) u.searchParams.set("g", nomor);
+    return u.toString();
+  }
+  return `RSVP2|${token}|${encodeURIComponent(name||"")}|${encodeURIComponent(String(nomor||""))}`;
+}
+function parseScanned(text){
+  try {
+    const u = new URL(text);
+    const tok=u.searchParams.get("rsvp");
+    if (tok) return { token: tok, name: u.searchParams.get("n")||"", nomor: u.searchParams.get("g")||"" };
+  } catch {}
+  const m2 = /^RSVP2\|([^|]+)\|([^|]*)\|([^|]*)$/i.exec(text||"");
+  if (m2) return { token:m2[1], name: decodeURIComponent(m2[2]||""), nomor: decodeURIComponent(m2[3]||"") };
+  const m = /^RSVP\|([^|]+)\|?(.*)$/i.exec(text||"");
+  if (m)  return { token:m[1], name: decodeURIComponent(m[2]||""), nomor: "" };
+  return { token:text, name:"", nomor:"" };
+}
+
+/* ================== IndexedDB ================== */
+const DB_NAME="bukuTamuDB_fix", STORE="tamu";
+let db=null;
+function openDB(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(DB_NAME,1);
+    r.onupgradeneeded=()=>{const _db=r.result; const s=_db.createObjectStore(STORE,{keyPath:"id",autoIncrement:true});
+      s.createIndex("barcode","barcode"); s.createIndex("waktu","waktu"); s.createIndex("nomor","nomor"); };
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+}
+const tx = (mode)=>db.transaction(STORE,mode).objectStore(STORE);
+const addEntry=(e)=>new Promise((res,rej)=>{const q=tx("readwrite").add(e); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);});
+const putEntry=(e)=>new Promise((res,rej)=>{const q=tx("readwrite").put(e); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);});
+const getAll =()=>new Promise((res,rej)=>{const q=tx("readonly").getAll(); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);});
+const getById=(id)=>new Promise((res,rej)=>{const q=tx("readonly").get(id); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);});
+const findByBarcode=(b)=>new Promise((res,rej)=>{const q=tx("readonly").index("barcode").getAll(b); q.onsuccess=()=>res(q.result||[]); q.onerror=()=>rej(q.error);});
+const delById=(id)=>new Promise((res,rej)=>{const q=tx("readwrite").delete(id); q.onsuccess=()=>res(true); q.onerror=()=>rej(q.error);});
+const clearAll=()=>new Promise((res,rej)=>{const q=tx("readwrite").clear(); q.onsuccess=()=>res(true); q.onerror=()=>rej(q.error);});
+async function getNextNomor(){ const rows=await getAll(); const ns=rows.map(r=>Number(r.nomor)).filter(Number.isFinite); return ns.length?Math.max(...ns)+1:1; }
+
+/* ================== Tabel ================== */
+function renderTable(rows){
+  const q=(document.getElementById("searchInput").value||"").toLowerCase();
+  const tb=document.getElementById("tableBody"); tb.innerHTML="";
+  rows.filter(r=>!q || (r.nama||"").toLowerCase().includes(q) || (r.barcode||"").toLowerCase().includes(q) || String(r.nomor||"").includes(q))
+      .sort((a,b)=>new Date(b.waktu)-new Date(a.waktu))
+      .forEach(r=>{
         const tr=document.createElement("tr"); tr.className="border-t border-slate-100 hover:bg-slate-50";
         tr.innerHTML=`
           <td class="px-3 py-2 whitespace-nowrap">${isoToLocal(r.waktu)}</td>
@@ -348,233 +312,235 @@
           </td>`;
         tb.appendChild(tr);
       });
-      tb.querySelectorAll(".delBtn").forEach(b=>b.addEventListener("click", async e=>{await delById(Number(e.target.dataset.id)); refreshTable();}));
-      tb.querySelectorAll(".markBtn").forEach(b=>b.addEventListener("click", async e=>{
-        const id=Number(e.target.dataset.id); const row=await getById(id); if(!row) return;
-        row.hadir=true; row.waktuHadir=new Date().toISOString(); await putEntry(row); refreshTable();
-      }));
-    }
-    async function refreshTable(){ renderTable(await getAll()); }
+  tb.querySelectorAll(".delBtn").forEach(b=>b.addEventListener("click",async e=>{await delById(Number(e.target.dataset.id)); refreshTable();}));
+  tb.querySelectorAll(".markBtn").forEach(b=>b.addEventListener("click",async e=>{
+    const id=Number(e.target.dataset.id); const row=await getById(id); if(!row) return;
+    row.hadir=true; row.waktuHadir=new Date().toISOString(); await putEntry(row); refreshTable();
+  }));
+}
+async function refreshTable(){ renderTable(await getAll()); }
 
-    // ==========================
-    // Export CSV
-    // ==========================
-    function toCSV(rows){
-      const headers=["id","waktu","barcode","nomor","nama","telp","catatan","hadir","waktuHadir","remoteStatus"];
-      const esc=v=>v==null?"":`"${String(v).replace(/"/g,'""')}"`;
-      return [headers.map(esc).join(",")].concat(rows.map(r=>headers.map(h=>esc(r[h])).join(","))).join("\r\n");
-    }
-    function download(filename,text){
-      const blob=new Blob([text],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob);
-      const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    }
+/* ================== Export CSV ================== */
+function toCSV(rows){
+  const headers=["id","waktu","barcode","nomor","nama","telp","catatan","hadir","waktuHadir","remoteStatus"];
+  const esc=v=>v==null?"":`"${String(v).replace(/"/g,'""')}"`;
+  return [headers.map(esc).join(",")].concat(rows.map(r=>headers.map(h=>esc(r[h])).join(","))).join("\r\n");
+}
+function download(filename,text){ const blob=new Blob([text],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
 
-    // ==========================
-    // Remote POST (opsional)
-    // ==========================
-    async function sendRemote(entry){
-      if(!REMOTE_POST_URL) return {ok:true, skipped:true};
-      try{
-        const res=await fetch(REMOTE_POST_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(entry)});
-        if(!res.ok) throw new Error("HTTP "+res.status);
-        return {ok:true};
-      }catch(e){ console.warn("Remote gagal:",e); return {ok:false,error:String(e)}; }
-    }
+/* ================== Generator QR/Barcode ================== */
+let lastToken="", lastPayload="";
+function renderQRorBarcode(payload){
+  const type = document.querySelector('input[name="qrtype"]:checked')?.value || "qr";
+  const wrap = document.getElementById("qrContainer"); wrap.innerHTML="";
+  if (type === "qr") {
+    new QRCode(wrap,{text:payload,width:260,height:260,correctLevel:QRCode.CorrectLevel.M});
+  } else {
+    const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+    wrap.appendChild(svg);
+    JsBarcode(svg, payload, {format:"code128", width:2, height:120, margin:10, displayValue:false});
+  }
+  document.getElementById("downloadQrBtn").disabled = false;
+}
+function downloadCurrentPNG(){
+  const cont=document.getElementById("qrContainer");
+  const img=cont.querySelector("img");
+  if(img){ triggerDownload(img.src, `RSVP-${lastToken}.png`); return; }
+  const svg=cont.querySelector("svg");
+  if(svg){ const xml=new XMLSerializer().serializeToString(svg); const dataUrl='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml); triggerDownload(dataUrl, `RSVP-${lastToken}.png`); return; }
+  alert("Tidak ada gambar untuk diunduh.");
+}
+function triggerDownload(url, filename){ const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); }
 
-    // ==========================
-    // Scanner
-    // ==========================
-    let codeReader=null, videoControls=null, selectedDeviceId=null;
-    function getHintsByMode(mode){
-      const hints=new Map();
-      if(mode==="qr-only") hints.set(DecodeHintType.POSSIBLE_FORMATS,[BarcodeFormat.QR_CODE]);
-      else if(mode==="barcode-only") hints.set(DecodeHintType.POSSIBLE_FORMATS,[BarcodeFormat.CODE_128,BarcodeFormat.CODE_39,BarcodeFormat.EAN_13,BarcodeFormat.EAN_8,BarcodeFormat.UPC_A,BarcodeFormat.UPC_E,BarcodeFormat.ITF,BarcodeFormat.CODABAR]);
-      else hints.set(DecodeHintType.POSSIBLE_FORMATS,[BarcodeFormat.QR_CODE,BarcodeFormat.CODE_128,BarcodeFormat.CODE_39,BarcodeFormat.EAN_13,BarcodeFormat.EAN_8,BarcodeFormat.UPC_A,BarcodeFormat.UPC_E,BarcodeFormat.ITF,BarcodeFormat.CODABAR]);
-      hints.set(DecodeHintType.TRY_HARDER,true); return hints;
-    }
-    async function listCameras(){
-      const sel=document.getElementById("cameraSelect"); sel.innerHTML="";
-      const devices=await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
-      if(devices.length===0){const opt=document.createElement("option"); opt.value=""; opt.textContent="Tidak ada kamera"; sel.appendChild(opt); return;}
-      devices.forEach((d,i)=>{const opt=document.createElement("option"); opt.value=d.deviceId; opt.textContent=d.label||`Kamera ${i+1}`; sel.appendChild(opt);});
-      selectedDeviceId=devices[0].deviceId; sel.value=selectedDeviceId; sel.addEventListener("change",(e)=>{selectedDeviceId=e.target.value;});
-    }
-    async function startScan(){
-      const hints=getHintsByMode(document.getElementById("scanMode").value);
-      codeReader=new BrowserMultiFormatReader(hints); stopScan();
-      try{
-        videoControls=await codeReader.decodeFromVideoDevice(selectedDeviceId,"videoPreview",(result,err)=>{
-          if(result){ const raw=result.getText(); const p=parseScanned(raw); onScanResult(raw,p); }
-          else if(err && !(err instanceof NotFoundException)){ console.warn(err); }
-        });
-      }catch(e){ console.error(e); setStatus("Gagal memulai kamera. Izinkan kamera & gunakan HTTPS/localhost.",true); }
-    }
-    function stopScan(){ try{if(videoControls&&videoControls.stop)videoControls.stop();}catch{} try{if(codeReader&&codeReader.reset)codeReader.reset();}catch{} videoControls=null; }
-    async function scanFromFile(file){
-      const img=new Image(); img.src=URL.createObjectURL(file);
-      img.onload=async ()=>{ const hints=getHintsByMode(document.getElementById("scanMode").value); const reader=new BrowserMultiFormatReader(hints);
-        try{ const r=await reader.decodeFromImageElement(img); const raw=r.getText(); const p=parseScanned(raw); onScanResult(raw,p); }
-        catch{ setStatus("Tidak terdeteksi kode pada gambar.",true); } finally{ URL.revokeObjectURL(img.src); } };
-    }
-    function onScanResult(raw, parsed){
-      beepOK(); document.getElementById("lastResult").textContent=raw;
-      document.getElementById("barcodeValue").value = parsed.token||raw;
-      if(parsed.name)  document.getElementById("nama").value = parsed.name;
-      if(parsed.nomor) document.getElementById("nomorTamu").value = parsed.nomor;
-      setStatus("Kode terdeteksi. Klik Simpan/Perbarui atau Tandai Hadir.",false);
-    }
+/* ================== Scanner: html5-qrcode ================== */
+let html5QrCode=null, currentDeviceId=null, scanning=false, lastText="", lastAt=0;
+function setScanStatus(msg,isErr=false){ const el=document.getElementById("scanStatus"); el.textContent=msg; el.className="text-sm "+(isErr?"text-rose-600":"text-slate-500"); }
+async function listCameras(){
+  const sel=document.getElementById("cameraSelect"); sel.innerHTML="";
+  try{
+    const cams = await Html5Qrcode.getCameras();
+    if (!cams || cams.length===0) { sel.innerHTML=`<option value="">Tidak ada kamera (cek HTTPS & izin)</option>`; return; }
+    // pilih kamera belakang jika ada
+    let back = cams.find(c => /back|rear|environment/i.test(c.label||"")) || cams[0];
+    cams.forEach((c,i)=>{ const opt=document.createElement("option"); opt.value=c.id; opt.textContent=c.label||`Kamera ${i+1}`; sel.appendChild(opt); });
+    currentDeviceId = back.id; sel.value = currentDeviceId;
+    sel.onchange = e => { currentDeviceId = e.target.value; if(scanning){ stopScan().then(startScan); } };
+  }catch(e){ sel.innerHTML=`<option value="">Gagal membaca kamera: ${e?.name||e}</option>`; }
+}
+async function startScan(){
+  if (scanning) return;
+  const readerDivId = "reader";
+  if (!html5QrCode) html5QrCode = new Html5Qrcode(readerDivId, { formatsToSupport: [
+    Html5QrcodeSupportedFormats.QR_CODE,
+    Html5QrcodeSupportedFormats.CODE_128,
+    Html5QrcodeSupportedFormats.CODE_39,
+    Html5QrcodeSupportedFormats.EAN_13,
+    Html5QrcodeSupportedFormats.EAN_8,
+    Html5QrcodeSupportedFormats.UPC_A,
+    Html5QrcodeSupportedFormats.UPC_E,
+    Html5QrcodeSupportedFormats.ITF
+  ]});
+  lastText=""; lastAt=0;
+  try{
+    const config = { fps: 15, qrbox: { width: 250, height: 250 }, rememberLastUsedCamera: false };
+    const cameraConfig = currentDeviceId ? { deviceId: { exact: currentDeviceId } } : { facingMode: { ideal: "environment" } };
+    await html5QrCode.start(cameraConfig, config,
+      (decodedText) => {
+        const now=Date.now();
+        if (decodedText === lastText && (now - lastAt) < 1000) return; // anti spam
+        lastText = decodedText; lastAt = now;
+        onScan(decodedText);
+      },
+      (errMsg) => { /* per-frame error ignored */ }
+    );
+    scanning = true; setScanStatus("Kamera aktif.");
+  }catch(e){
+    setScanStatus(mapMediaError(e), true);
+  }
+}
+async function stopScan(){
+  if (!html5QrCode || !scanning) return;
+  try{
+    await html5QrCode.stop(); await html5QrCode.clear();
+  }catch{} finally{ scanning=false; setScanStatus("Kamera berhenti."); }
+}
+function mapMediaError(e){
+  const n=e?.name||""; if(n==="NotAllowedError")return" akses kamera ditolak (Allow di site settings)";
+  if(n==="NotFoundError")return" kamera tidak ditemukan";
+  if(n==="NotReadableError")return" kamera dipakai app lain (tutup Zoom/WA/Teams)";
+  if(n==="OverconstrainedError")return" constraint tidak cocok (coba pilih kamera lain)";
+  if(n==="SecurityError")return" origin tidak aman (pakai HTTPS/localhost)";
+  return `Gagal mengakses kamera: ${n||e}`;
+}
+async function testCameraBasic(){
+  try{
+    const s = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:"environment"} }, audio:false });
+    s.getTracks().forEach(t=>t.stop());
+    alert("Kamera OK & izin diberikan.");
+  }catch(e){
+    alert("Gagal akses kamera:\n"+(e.name||e)+": "+(e.message||"")+"\n\nTips: pakai HTTPS/localhost & Allow camera.");
+  }
+}
+function onScan(raw){
+  beepOK();
+  document.getElementById("lastResult").textContent = raw;
+  const p = parseScanned(raw);
+  document.getElementById("barcodeValue").value = p.token || raw;
+  if (p.name)  document.getElementById("nama").value = p.name;
+  if (p.nomor) document.getElementById("nomorTamu").value = p.nomor;
+  setStatus("Kode terdeteksi. Klik Simpan/Perbarui atau Tandai Hadir.", false);
+}
 
-    // ==========================
-    // Form Panitia (save/update)
-    // ==========================
-    function setStatus(msg,isError=false){ const el=document.getElementById("statusMsg"); el.textContent=msg; el.className="text-sm "+(isError?"text-rose-600":"text-slate-500"); }
+/* ================== Form Panitia ================== */
+function setStatus(msg,isErr=false){ const el=document.getElementById("statusMsg"); el.textContent=msg; el.className="text-sm "+(isErr?"text-rose-600":"text-slate-500"); }
+async function handleSave(markPresent=false){
+  const barcode=(document.getElementById("barcodeValue").value||"").trim();
+  const nama=(document.getElementById("nama").value||"").trim();
+  const nomor=(document.getElementById("nomorTamu").value||"").trim();
+  const telp=(document.getElementById("telp").value||"").trim();
+  const catatan=(document.getElementById("catatan").value||"").trim();
+  if(!barcode){ setStatus("Token wajib diisi (scan/RSVP dulu).",true); return; }
 
-    async function handleSave(markPresent=false){
-      const barcode=(document.getElementById("barcodeValue").value||"").trim();
-      const nama=(document.getElementById("nama").value||"").trim();
-      const nomor=(document.getElementById("nomorTamu").value||"").trim();
-      const telp=(document.getElementById("telp").value||"").trim();
-      const catatan=(document.getElementById("catatan").value||"").trim();
-      if(!barcode){ setStatus("Token wajib diisi (scan/RSVP dulu).",true); return; }
+  const exists=await findByBarcode(barcode);
+  if(exists.length>0){
+    const row=exists[0];
+    row.nama = nama || row.nama;
+    row.nomor = nomor || row.nomor;
+    row.telp = telp || row.telp;
+    row.catatan = catatan || row.catatan;
+    if(markPresent){ row.hadir=true; row.waktuHadir=new Date().toISOString(); }
+    await putEntry(row);
+    setStatus(`Data diperbarui${markPresent?" & ditandai hadir":""}.`);
+  } else {
+    const entry={ waktu:new Date().toISOString(), barcode, nama, nomor, telp, catatan, hadir:!!markPresent, waktuHadir: markPresent? new Date().toISOString(): null, remoteStatus:"" };
+    await addEntry(entry);
+    setStatus("Data tersimpan.");
+  }
+  refreshTable();
+}
 
-      const exists=await findByBarcode(barcode);
-      if(exists.length>0){
-        const row=exists[0];
-        row.nama   = nama || row.nama;
-        row.nomor  = nomor || row.nomor;
-        row.telp   = telp  || row.telp;
-        row.catatan= catatan || row.catatan;
-        if(markPresent){ row.hadir=true; row.waktuHadir=new Date().toISOString(); }
-        await putEntry(row);
-        const remoteRes=await sendRemote({ action:"update", ...row });
-        if(!remoteRes.skipped){ row.remoteStatus = remoteRes.ok?"OK":("ERR: "+(remoteRes.error||"")); await putEntry(row); }
-        setStatus(`Data diperbarui${markPresent?" & ditandai hadir":""}.`);
-      } else {
-        const entry={ waktu:new Date().toISOString(), barcode, nama, nomor, telp, catatan, hadir:!!markPresent, waktuHadir: markPresent? new Date().toISOString(): null, remoteStatus:"" };
-        const id=await addEntry(entry);
-        const remoteRes=await sendRemote({ id, ...entry });
-        if(!remoteRes.skipped){ entry.remoteStatus = remoteRes.ok?"OK":("ERR: "+(remoteRes.error||"")); await putEntry({id,...entry}); }
-        setStatus("Data tersimpan.");
-      }
-      refreshTable();
-    }
+/* ================== RSVP Submit ================== */
+document.getElementById("rsvpForm").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  INVITE_BASE_URL = (document.getElementById("baseUrl").value||"").trim();
 
-    // ==========================
-    // Generator dari RSVP (untuk tamu)
-    // ==========================
-    let lastToken="", lastPayload="";
-    function clearPreview(){
-      document.getElementById("qrContainer").innerHTML="";
-      document.getElementById("payloadBox").textContent="—";
-      document.getElementById("tokenBox").textContent="—";
-      document.getElementById("nameBox").textContent="—";
-      document.getElementById("numBox").textContent="—";
-      document.getElementById("downloadQrBtn").disabled = true;
-    }
-    function renderQR(payload){
-      const type = document.querySelector('input[name="qrtype"]:checked')?.value || "qr";
-      const wrap = document.getElementById("qrContainer");
-      wrap.innerHTML="";
-      if(type==="qr"){
-        new QRCode(wrap,{text:payload,width:260,height:260,correctLevel:QRCode.CorrectLevel.M});
-      }else{
-        const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
-        wrap.appendChild(svg);
-        JsBarcode(svg, payload, {format:"code128", width:2, height:120, margin:10, displayValue:false});
-      }
-      document.getElementById("downloadQrBtn").disabled = false;
-    }
-    function downloadCurrentPNG(){
-      const cont=document.getElementById("qrContainer");
-      const img=cont.querySelector("img");
-      if(img){ triggerDownload(img.src, `RSVP-${lastToken}.png`); return; }
-      const svg=cont.querySelector("svg");
-      if(svg){
-        const xml=new XMLSerializer().serializeToString(svg);
-        const dataUrl='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml);
-        triggerDownload(dataUrl, `RSVP-${lastToken}.png`); return;
-      }
-      alert("Tidak ada gambar untuk diunduh.");
-    }
-    function triggerDownload(url, filename){
-      const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
-    }
+  const nama  = document.getElementById("rsvpNama").value.trim();
+  let nomor   = document.getElementById("rsvpNomor").value.trim();
+  const telp  = document.getElementById("rsvpTelp").value.trim();
+  const catat = document.getElementById("rsvpCatatan").value.trim();
+  const auto  = document.getElementById("autoNomor").checked;
 
-    async function addDraftRSVP(token, nama, nomor, telp, catatan){
-      const exists=await findByBarcode(token);
-      if(exists.length>0) return exists[0].id;
-      const entry={ waktu:new Date().toISOString(), barcode:token, nama, nomor, telp, catatan, hadir:false, waktuHadir:null, remoteStatus:"" };
-      return await addEntry(entry);
-    }
+  if(!nama){ setRSVPStatus("Nama wajib diisi.", true); clearPreview(); return; }
+  if(auto || !nomor){ nomor = String(await getNextNomor()); document.getElementById("rsvpNomor").value = nomor; }
 
-    // ==========================
-    // INIT
-    // ==========================
-    (async function init(){
-      db = await openDB(); await listCameras(); await refreshTable();
+  lastToken   = buildToken(nama, nomor);
+  lastPayload = buildPayload(lastToken, nama, nomor);
 
-      // Scanner bindings
-      document.getElementById("startBtn").addEventListener("click", startScan);
-      document.getElementById("stopBtn").addEventListener("click", stopScan);
-      document.getElementById("fileInput").addEventListener("change",(e)=>{const f=e.target.files?.[0]; if(f) scanFromFile(f); e.target.value="";});
+  // Render QR / Barcode + simpan draft
+  renderQRorBarcode(lastPayload);
+  document.getElementById("payloadBox").textContent = lastPayload;
+  document.getElementById("tokenBox").textContent   = lastToken;
+  document.getElementById("nameBox").textContent    = nama;
+  document.getElementById("numBox").textContent     = nomor;
 
-      // Tabel/search/export
-      document.getElementById("searchInput").addEventListener("input", refreshTable);
-      document.getElementById("exportCsvBtn").addEventListener("click", async ()=>{ const rows=await getAll(); download(`buku-tamu-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows)); });
-      document.getElementById("clearAllBtn").addEventListener("click", async ()=>{ if(!confirm("Yakin hapus semua data lokal?"))return; await clearAll(); await refreshTable(); setStatus("Semua data dihapus."); });
+  // Simpan sebagai draft RSVP
+  const exists=await findByBarcode(lastToken);
+  if(exists.length===0){
+    await addEntry({ waktu:new Date().toISOString(), barcode:lastToken, nama, nomor, telp, catatan:catat, hadir:false, waktuHadir:null, remoteStatus:"" });
+    await refreshTable();
+  }
 
-      // Panitia form
-      document.getElementById("guestForm").addEventListener("submit", async (e)=>{ e.preventDefault(); await handleSave(false); });
-      document.getElementById("markPresentBtn").addEventListener("click", async ()=>{ await handleSave(true); });
+  // Pre-fill form panitia
+  document.getElementById("barcodeValue").value = lastToken;
+  document.getElementById("nama").value = nama;
+  document.getElementById("nomorTamu").value = nomor;
+  document.getElementById("telp").value = telp;
+  document.getElementById("catatan").value = catat;
 
-      // RSVP form (tamu)
-      document.getElementById("rsvpForm").addEventListener("submit", async (e)=>{
-        e.preventDefault();
-        INVITE_BASE_URL = (document.getElementById("baseUrl").value||"").trim();
+  setRSVPStatus("RSVP tersimpan & QR dibuat. Silakan unduh PNG.", false);
+});
+function setRSVPStatus(msg,isErr=false){ const el=document.getElementById("rsvpStatus"); el.textContent=msg; el.className="text-sm "+(isErr?"text-rose-600":"text-slate-500"); }
+function clearPreview(){ document.getElementById("qrContainer").innerHTML=""; document.getElementById("payloadBox").textContent="—"; document.getElementById("tokenBox").textContent="—"; document.getElementById("nameBox").textContent="—"; document.getElementById("numBox").textContent="—"; document.getElementById("downloadQrBtn").disabled = true; }
+document.getElementById("downloadQrBtn").addEventListener("click", ()=>downloadCurrentPNG());
+document.querySelectorAll('input[name="qrtype"]').forEach(r=>r.addEventListener("change",()=>{ if(lastPayload){ renderQRorBarcode(lastPayload); }}));
 
-        const nama  = document.getElementById("rsvpNama").value.trim();
-        let nomor   = document.getElementById("rsvpNomor").value.trim();
-        const telp  = document.getElementById("rsvpTelp").value.trim();
-        const catat = document.getElementById("rsvpCatatan").value.trim();
-        const auto  = document.getElementById("autoNomor").checked;
+/* ================== Scanner bindings ================== */
+document.getElementById("startBtn").addEventListener("click", startScan);
+document.getElementById("stopBtn").addEventListener("click", stopScan);
+document.getElementById("testCamBtn").addEventListener("click", testCameraBasic);
+document.getElementById("fileInput").addEventListener("change", async (e)=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  try{
+    // html5-qrcode juga bisa decode file langsung (khusus QR & beberapa format)
+    const tmp = new Html5Qrcode(/* element id: create temp */ document.createElement("div"));
+    const decoded = await tmp.scanFile(f, true);
+    tmp.clear(); // cleanup
+    document.getElementById("lastResult").textContent = decoded;
+    onScan(decoded);
+  }catch(err){ setScanStatus("Gagal decode gambar.", true); }
+  e.target.value="";
+});
 
-        if(!nama){ setRSVPStatus("Nama wajib diisi.", true); clearPreview(); return; }
-        if(auto || !nomor){ nomor = String(await getNextNomor()); document.getElementById("rsvpNomor").value = nomor; }
+/* ================== Table/Search/Export ================== */
+document.getElementById("searchInput").addEventListener("input", refreshTable);
+document.getElementById("exportCsvBtn").addEventListener("click", async ()=>{
+  const rows=await getAll(); download(`buku-tamu-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows));
+});
+document.getElementById("clearAllBtn").addEventListener("click", async ()=>{
+  if(!confirm("Yakin hapus semua data lokal?")) return;
+  await clearAll(); await refreshTable(); setStatus("Semua data dihapus.");
+});
 
-        lastToken   = buildTokenFromNameAndNumber(nama, nomor);
-        lastPayload = buildPayload(lastToken, nama, nomor);
+/* ================== Panitia form ================== */
+document.getElementById("guestForm").addEventListener("submit", async (e)=>{ e.preventDefault(); await handleSave(false); });
+document.getElementById("markPresentBtn").addEventListener("click", async ()=>{ await handleSave(true); });
 
-        // Render QR/barcode + tampilkan payload
-        renderQR(lastPayload);
-        document.getElementById("payloadBox").textContent = lastPayload;
-        document.getElementById("tokenBox").textContent   = lastToken;
-        document.getElementById("nameBox").textContent    = nama;
-        document.getElementById("numBox").textContent     = nomor;
-
-        // Auto simpan sebagai draft RSVP
-        await addDraftRSVP(lastToken, nama, nomor, telp, catat);
-        await refreshTable();
-
-        // Isi form panitia agar siap jika langsung scan
-        document.getElementById("barcodeValue").value = lastToken;
-        document.getElementById("nama").value = nama;
-        document.getElementById("nomorTamu").value = nomor;
-        document.getElementById("telp").value = telp;
-        document.getElementById("catatan").value = catat;
-
-        setRSVPStatus("RSVP tersimpan & QR dibuat. Silakan unduh PNG.", false);
-      });
-
-      document.getElementById("downloadQrBtn").addEventListener("click", downloadCurrentPNG);
-      document.querySelectorAll('input[name="qrtype"]').forEach(r=>{
-        r.addEventListener("change", ()=>{ if(lastPayload){ renderQR(lastPayload); }});
-      });
-
-      function setRSVPStatus(msg,isErr=false){
-        const el=document.getElementById("rsvpStatus");
-        el.textContent=msg; el.className="text-sm "+(isErr?"text-rose-600":"text-slate-500");
-      }
-    })();
-  </script>
+/* ================== INIT ================== */
+(async function init(){
+  db = await openDB();
+  await listCameras();
+  await refreshTable();
+})();
+</script>
 </body>
 </html>
