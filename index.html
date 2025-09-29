@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Buku Tamu – Scan Barcode/QR</title>
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- ZXing for QR & Barcode -->
+  <script src="https://unpkg.com/@zxing/browser@latest"></script>
+  <style>
+    /* Agar video preview rapi */
+    #videoPreview { aspect-ratio: 16/9; object-fit: cover; border-radius: 1rem; }
+    /* Hilangkan spin number input di Chrome */
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <div class="max-w-6xl mx-auto p-4 md:p-8">
+    <header class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-semibold">Buku Tamu Digital</h1>
+        <p class="text-sm text-slate-500">Scan barcode / QR → simpan otomatis ke database (IndexedDB).</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="exportCsvBtn" class="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Export CSV</button>
+        <button id="clearAllBtn" class="px-4 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700">Hapus Semua</button>
+      </div>
+    </header>
+
+    <!-- Kartu Scanner -->
+    <section class="grid md:grid-cols-2 gap-6">
+      <div class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold">Scanner Kamera</h2>
+          <span class="text-xs text-slate-500">HTTPS/localhost diperlukan untuk izin kamera</span>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-3 mb-3">
+          <label class="block">
+            <span class="text-sm text-slate-600">Pilih Kamera</span>
+            <select id="cameraSelect" class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"></select>
+          </label>
+          <label class="block">
+            <span class="text-sm text-slate-600">Mode</span>
+            <select id="scanMode" class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500">
+              <option value="qr+barcode">QR + Barcode (multi-format)</option>
+              <option value="qr-only">QR saja</option>
+              <option value="barcode-only">Barcode saja</option>
+            </select>
+          </label>
+        </div>
+
+        <video id="videoPreview" class="w-full bg-black/5 ring-1 ring-slate-200"></video>
+
+        <div class="flex items-center gap-3 mt-4">
+          <button id="startBtn" class="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700">Mulai Scan</button>
+          <button id="stopBtn" class="px-4 py-2 rounded-xl bg-slate-700 text-white hover:bg-slate-800">Stop</button>
+
+          <label class="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 cursor-pointer hover:bg-slate-200">
+            <input id="fileInput" type="file" accept="image/*" class="hidden" />
+            <span class="text-sm">Scan dari Gambar</span>
+          </label>
+        </div>
+
+        <div class="mt-4 p-3 rounded-xl bg-slate-50 ring-1 ring-slate-200">
+          <div class="text-sm text-slate-600">Hasil terakhir:</div>
+          <div id="lastResult" class="mt-1 font-mono text-sm break-all text-emerald-700">—</div>
+        </div>
+      </div>
+
+      <!-- Form Data Tamu -->
+      <div class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
+        <h2 class="text-lg font-semibold mb-3">Detail Tamu</h2>
+        <form id="guestForm" class="grid grid-cols-1 gap-3">
+          <label class="block">
+            <span class="text-sm text-slate-600">Kode/Token (dari Barcode/QR)</span>
+            <input id="barcodeValue" type="text" required placeholder="Otomatis terisi saat scan..." class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500" />
+          </label>
+          <div class="grid md:grid-cols-2 gap-3">
+            <label class="block">
+              <span class="text-sm text-slate-600">Nama</span>
+              <input id="nama" type="text" placeholder="Nama Tamu" class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500" />
+            </label>
+            <label class="block">
+              <span class="text-sm text-slate-600">No. HP (opsional)</span>
+              <input id="telp" type="tel" placeholder="08xxxxxxxxxx" class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500" />
+            </label>
+          </div>
+          <label class="block">
+            <span class="text-sm text-slate-600">Keterangan (opsional)</span>
+            <input id="catatan" type="text" placeholder="Instansi, relasi, dsb." class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500" />
+          </label>
+
+          <div class="flex items-center gap-3 mt-1">
+            <button class="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" type="submit">Simpan</button>
+            <button id="markPresentBtn" class="px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700" type="button">Simpan + Hadir</button>
+            <span id="statusMsg" class="text-sm text-slate-500"></span>
+          </div>
+
+          <p class="text-xs text-slate-500 mt-1">Duplikat dicegah berdasarkan nilai barcode/token.</p>
+        </form>
+      </div>
+    </section>
+
+    <!-- Tabel Riwayat -->
+    <section class="mt-8 rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Riwayat Buku Tamu</h2>
+        <div class="flex items-center gap-2">
+          <input id="searchInput" type="text" placeholder="Cari nama / barcode..." class="w-56 rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500" />
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-slate-50">
+            <tr class="text-left">
+              <th class="px-3 py-2">Waktu</th>
+              <th class="px-3 py-2">Barcode/Token</th>
+              <th class="px-3 py-2">Nama</th>
+              <th class="px-3 py-2">HP</th>
+              <th class="px-3 py-2">Keterangan</th>
+              <th class="px-3 py-2">Status</th>
+              <th class="px-3 py-2">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="text-center text-xs text-slate-500 mt-8">
+      <p>Semua data disimpan di perangkat ini (IndexedDB). Atur endpoint server di variabel <code>REMOTE_POST_URL</code> jika ingin kirim ke database/Google Sheet.</p>
+    </footer>
+  </div>
+
+  <script>
+    // ==========================
+    // KONFIGURASI OPSIONAL
+    // ==========================
+    // Jika Anda punya endpoint (mis. Google Apps Script Web App / server Anda),
+    // isi URL-nya di sini agar setiap penyimpanan juga terkirim ke server.
+    // Contoh Apps Script (POST JSON) -> REMOTE_POST_URL = "https://script.google.com/macros/s/AKfy....../exec"
+    const REMOTE_POST_URL = ""; // kosong = tidak kirim ke server
+
+    // ==========================
+    // ZXING (QR/BARCODE)
+    // ==========================
+    const { BrowserMultiFormatReader, NotFoundException, BarcodeFormat, DecodeHintType } = ZXing;
+    let codeReader = null;
+    let videoControls = null;
+    let selectedDeviceId = null;
+
+    function getHintsByMode(mode) {
+      const hints = new Map();
+      if (mode === "qr-only") {
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
+      } else if (mode === "barcode-only") {
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.ITF, BarcodeFormat.CODABAR
+        ]);
+      } else {
+        // QR + berbagai 1D barcodes
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.QR_CODE, BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.ITF, BarcodeFormat.CODABAR
+        ]);
+      }
+      // Percepat detection:
+      hints.set(DecodeHintType.TRY_HARDER, true);
+      return hints;
+    }
+
+    async function listCameras() {
+      const select = document.getElementById("cameraSelect");
+      select.innerHTML = "";
+      const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+      if (devices.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "Tidak ada kamera terdeteksi";
+        select.appendChild(opt);
+        return;
+      }
+      devices.forEach((d, i) => {
+        const opt = document.createElement("option");
+        opt.value = d.deviceId;
+        opt.textContent = d.label || `Kamera ${i + 1}`;
+        select.appendChild(opt);
+      });
+      selectedDeviceId = devices[0].deviceId;
+      select.value = selectedDeviceId;
+      select.addEventListener("change", (e) => { selectedDeviceId = e.target.value; });
+    }
+
+    function beepOK() {
+      // bunyi "beep" kecil saat sukses scan
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = "square"; o.frequency.value = 880;
+        o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.05, ctx.currentTime);
+        o.start();
+        setTimeout(() => { o.stop(); ctx.close(); }, 120);
+      } catch {}
+    }
+
+    async function startScan() {
+      const scanMode = document.getElementById("scanMode").value;
+      const hints = getHintsByMode(scanMode);
+      codeReader = new BrowserMultiFormatReader(hints);
+      const videoElemId = "videoPreview";
+
+      stopScan(); // pastikan stop dulu
+      try {
+        videoControls = await codeReader.decodeFromVideoDevice(selectedDeviceId, videoElemId, (result, err) => {
+          if (result) {
+            const text = result.getText();
+            onScanResult(text);
+          } else if (err && !(err instanceof NotFoundException)) {
+            console.warn(err);
+          }
+        });
+      } catch (e) {
+        console.error(e);
+        setStatus("Gagal memulai kamera. Pastikan izin kamera diizinkan & gunakan HTTPS/localhost.", true);
+      }
+    }
+
+    function stopScan() {
+      try {
+        if (videoControls && typeof videoControls.stop === "function") videoControls.stop();
+      } catch {}
+      try {
+        if (codeReader && typeof codeReader.reset === "function") codeReader.reset();
+      } catch {}
+      videoControls = null;
+    }
+
+    async function scanFromFile(file) {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = async () => {
+        const hints = getHintsByMode(document.getElementById("scanMode").value);
+        const reader = new BrowserMultiFormatReader(hints);
+        try {
+          const result = await reader.decodeFromImageElement(img);
+          if (result) {
+            onScanResult(result.getText());
+          } else {
+            setStatus("Tidak terdeteksi kode pada gambar.", true);
+          }
+        } catch (e) {
+          setStatus("Gagal mendeteksi dari gambar.", true);
+        } finally {
+          URL.revokeObjectURL(img.src);
+        }
+      };
+    }
+
+    function onScanResult(text) {
+      beepOK();
+      document.getElementById("lastResult").textContent = text;
+      const bv = document.getElementById("barcodeValue");
+      if (!bv.value) bv.value = text; else if (bv.value !== text) bv.value = text; // selalu update
+      setStatus("Kode terdeteksi. Silakan klik Simpan.", false);
+    }
+
+    // ==========================
+    // IndexedDB (lokal)
+    // ==========================
+    const DB_NAME = "bukuTamuDB";
+    const STORE = "tamu";
+    let db = null;
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+          const _db = req.result;
+          if (!_db.objectStoreNames.contains(STORE)) {
+            const s = _db.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
+            s.createIndex("barcode", "barcode", { unique: false });
+            s.createIndex("waktu", "waktu", { unique: false });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function addEntry(entry) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, "readwrite");
+        const store = tx.objectStore(STORE);
+        const req = store.add(entry);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function updateEntry(id, patch) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, "readwrite");
+        const store = tx.objectStore(STORE);
+        const get = store.get(id);
+        get.onsuccess = () => {
+          const val = get.result;
+          if (!val) return reject(new Error("Data tidak ditemukan."));
+          Object.assign(val, patch);
+          const put = store.put(val);
+          put.onsuccess = () => resolve(put.result);
+          put.onerror = () => reject(put.error);
+        };
+        get.onerror = () => reject(get.error);
+      });
+    }
+
+    function getAllEntries() {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, "readonly");
+        const store = tx.objectStore(STORE);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function findByBarcode(barcode) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, "readonly");
+        const store = tx.objectStore(STORE);
+        const idx = store.index("barcode");
+        const req = idx.getAll(barcode);
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function deleteEntry(id) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, "readwrite");
+        const store = tx.objectStore(STORE);
+        const req = store.delete(id);
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function clearAll() {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, "readwrite");
+        const store = tx.objectStore(STORE);
+        const req = store.clear();
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    // ==========================
+    // UI Helper
+    // ==========================
+    function isoToLocal(iso) {
+      const d = new Date(iso);
+      const two = (n)=> String(n).padStart(2, "0");
+      return `${two(d.getDate())}/${two(d.getMonth()+1)}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}`;
+    }
+
+    function setStatus(msg, isError=false) {
+      const el = document.getElementById("statusMsg");
+      el.textContent = msg;
+      el.className = "text-sm " + (isError ? "text-rose-600" : "text-slate-500");
+    }
+
+    function renderTable(rows) {
+      const q = (document.getElementById("searchInput").value || "").toLowerCase();
+      const tb = document.getElementById("tableBody");
+      tb.innerHTML = "";
+
+      rows
+        .filter(r => {
+          if (!q) return true;
+          return (r.nama||"").toLowerCase().includes(q) || (r.barcode||"").toLowerCase().includes(q);
+        })
+        .sort((a,b) => new Date(b.waktu) - new Date(a.waktu))
+        .forEach(r => {
+          const tr = document.createElement("tr");
+          tr.className = "border-t border-slate-100 hover:bg-slate-50";
+          tr.innerHTML = `
+            <td class="px-3 py-2 whitespace-nowrap">${isoToLocal(r.waktu)}</td>
+            <td class="px-3 py-2 break-all font-mono text-xs">${r.barcode || "—"}</td>
+            <td class="px-3 py-2">${r.nama || "—"}</td>
+            <td class="px-3 py-2 whitespace-nowrap">${r.telp || "—"}</td>
+            <td class="px-3 py-2">${r.catatan || "—"}</td>
+            <td class="px-3 py-2">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs ${r.hadir ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}">
+                ${r.hadir ? "Hadir" : "Draft"}
+              </span>
+            </td>
+            <td class="px-3 py-2">
+              <button data-id="${r.id}" class="delBtn text-rose-600 hover:underline">Hapus</button>
+              ${r.hadir ? "" : `<button data-id="${r.id}" class="markBtn ml-2 text-indigo-600 hover:underline">Tandai Hadir</button>`}
+            </td>
+          `;
+          tb.appendChild(tr);
+        });
+
+      // Bind aksi
+      tb.querySelectorAll(".delBtn").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+          const id = Number(e.target.getAttribute("data-id"));
+          await deleteEntry(id);
+          refreshTable();
+        });
+      });
+      tb.querySelectorAll(".markBtn").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+          const id = Number(e.target.getAttribute("data-id"));
+          await updateEntry(id, { hadir: true, waktuHadir: new Date().toISOString() });
+          refreshTable();
+        });
+      });
+    }
+
+    async function refreshTable() {
+      const rows = await getAllEntries();
+      renderTable(rows);
+    }
+
+    function toCSV(rows) {
+      const headers = ["id","waktu","barcode","nama","telp","catatan","hadir","waktuHadir","remoteStatus"];
+      const esc = (v) => {
+        if (v == null) return "";
+        const s = String(v).replace(/"/g, '""');
+        return `"${s}"`;
+      };
+      const lines = [headers.map(esc).join(",")];
+      rows.forEach(r => {
+        lines.push(headers.map(h => esc(r[h])).join(","));
+      });
+      return lines.join("\r\n");
+    }
+
+    function download(filename, text) {
+      const blob = new Blob([text], {type: "text/csv;charset=utf-8;"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    async function sendRemote(entry) {
+      if (!REMOTE_POST_URL) return { ok: true, skipped: true };
+      try {
+        const res = await fetch(REMOTE_POST_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(entry),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return { ok: true };
+      } catch (e) {
+        console.warn("Gagal kirim ke remote:", e);
+        return { ok: false, error: String(e) };
+      }
+    }
+
+    // ==========================
+    // Form Logic
+    // ==========================
+    async function handleSave(markPresent = false) {
+      const barcode = (document.getElementById("barcodeValue").value || "").trim();
+      const nama = (document.getElementById("nama").value || "").trim();
+      const telp = (document.getElementById("telp").value || "").trim();
+      const catatan = (document.getElementById("catatan").value || "").trim();
+
+      if (!barcode) {
+        setStatus("Barcode/Token wajib diisi (scan dulu).", true);
+        return;
+      }
+
+      // Cegah duplikat barcode
+      const dupe = await findByBarcode(barcode);
+      if (dupe.length > 0) {
+        setStatus("Barcode sudah terdaftar. Silakan gunakan barcode lain.", true);
+        return;
+      }
+
+      const entry = {
+        waktu: new Date().toISOString(),
+        barcode, nama, telp, catatan,
+        hadir: !!markPresent,
+        waktuHadir: markPresent ? new Date().toISOString() : null,
+        remoteStatus: ""
+      };
+
+      // Simpan lokal dulu
+      const id = await addEntry(entry);
+
+      // Coba kirim remote (opsional)
+      const remoteRes = await sendRemote({ id, ...entry });
+      if (!remoteRes.skipped) {
+        await updateEntry(id, { remoteStatus: remoteRes.ok ? "OK" : ("ERR: " + (remoteRes.error || "")) });
+      }
+
+      // Reset form ringan
+      document.getElementById("nama").value = "";
+      document.getElementById("telp").value = "";
+      document.getElementById("catatan").value = "";
+
+      setStatus("Data tersimpan" + (remoteRes.ok ? " (sinkron remote)" : REMOTE_POST_URL ? " (gagal sinkron remote)" : ""), !remoteRes.ok && !!REMOTE_POST_URL);
+      refreshTable();
+    }
+
+    // ==========================
+    // Init
+    // ==========================
+    (async function init() {
+      db = await openDB();
+      await listCameras();
+      await refreshTable();
+
+      document.getElementById("startBtn").addEventListener("click", startScan);
+      document.getElementById("stopBtn").addEventListener("click", stopScan);
+      document.getElementById("fileInput").addEventListener("change", (e) => {
+        const f = e.target.files?.[0];
+        if (f) scanFromFile(f);
+        e.target.value = "";
+      });
+
+      document.getElementById("guestForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        await handleSave(false);
+      });
+      document.getElementById("markPresentBtn").addEventListener("click", async () => {
+        await handleSave(true);
+      });
+
+      document.getElementById("exportCsvBtn").addEventListener("click", async () => {
+        const rows = await getAllEntries();
+        download(`buku-tamu-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows));
+      });
+      document.getElementById("clearAllBtn").addEventListener("click", async () => {
+        if (!confirm("Yakin hapus semua data lokal?")) return;
+        await clearAll();
+        await refreshTable();
+        setStatus("Semua data dihapus.");
+      });
+
+      document.getElementById("searchInput").addEventListener("input", async () => {
+        const rows = await getAllEntries();
+        renderTable(rows);
+      });
+    })();
+  </script>
+</body>
+</html>
