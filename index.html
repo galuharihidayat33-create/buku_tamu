@@ -3,16 +3,57 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>RSVP + Buku Tamu (FIXED – html5-qrcode)</title>
+<title>RSVP + Buku Tamu (All-in-One, Fixed)</title>
 
 <!-- Tailwind -->
 <script src="https://cdn.tailwindcss.com"></script>
+
 <!-- QR Generator -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<!-- Barcode Generator (opsional) -->
+<!-- Barcode Generator -->
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-<!-- HTML5-QR Code (Scanner yang stabil) -->
-<script src="https://unpkg.com/html5-qrcode@2.3.10/minified/html5-qrcode.min.js"></script>
+
+<!-- Loader html5-qrcode dgn fallback CDN + flag siap -->
+<script>
+(function(){
+  const cdns = [
+    "https://unpkg.com/html5-qrcode@2.3.10/minified/html5-qrcode.min.js",
+    "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.10/minified/html5-qrcode.min.js"
+  ];
+  function loadNext(i){
+    if (i >= cdns.length) { window.__H5Q_LOAD_ERR = true; return; }
+    const s = document.createElement("script");
+    s.src = cdns[i]; s.defer = true; s.crossOrigin = "anonymous";
+    s.onload = () => { window.__H5Q_READY = true; };
+    s.onerror = () => loadNext(i+1);
+    document.head.appendChild(s);
+  }
+  loadNext(0);
+})();
+</script>
+
+<!-- Secure check + polyfill + helper tunggu library -->
+<script>
+const IS_SECURE = location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
+if (!("mediaDevices" in navigator) || !("getUserMedia" in navigator.mediaDevices)) {
+  const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+  if (legacy) {
+    navigator.mediaDevices = {
+      getUserMedia: (c) => new Promise((res, rej) => legacy.call(navigator, c, res, rej))
+    };
+  }
+}
+function waitForH5Q(timeout=5000){
+  return new Promise((resolve)=> {
+    const t0 = Date.now();
+    (function tick(){
+      if (window.__H5Q_READY || window.Html5Qrcode) return resolve();
+      if (window.__H5Q_LOAD_ERR || Date.now()-t0 > timeout) return resolve();
+      setTimeout(tick, 60);
+    })();
+  });
+}
+</script>
 
 <style>
   canvas, img { image-rendering: crisp-edges; }
@@ -23,10 +64,8 @@
 <div class="max-w-6xl mx-auto p-4 md:p-8">
   <header class="flex items-center justify-between mb-6">
     <div>
-      <h1 class="text-2xl md:text-3xl font-semibold">RSVP + Buku Tamu (FIXED)</h1>
-      <p class="text-sm text-slate-500">
-        Isi RSVP → generate QR berisi <b>Nama & Nomor</b> (plus token). Data tersimpan di IndexedDB. Scan saat acara.
-      </p>
+      <h1 class="text-2xl md:text-3xl font-semibold">RSVP + Buku Tamu (Fixed)</h1>
+      <p class="text-sm text-slate-500">RSVP → generate QR/Barcode (Nama + Nomor + Token), simpan ke IndexedDB, scan saat acara.</p>
       <div id="secureWarn" class="mt-2 hidden">
         <span class="badge bg-rose-100 text-rose-700 ring-1 ring-rose-200">PENTING</span>
         <span class="text-sm text-rose-700">Jalankan di HTTPS atau http://localhost agar kamera bisa dipakai.</span>
@@ -38,7 +77,7 @@
     </div>
   </header>
 
-  <!-- ========== RSVP (untuk tamu) ========== -->
+  <!-- ========== RSVP (Tamu) ========== -->
   <section class="grid md:grid-cols-2 gap-6">
     <div class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
       <h2 class="text-lg font-semibold mb-3">Form RSVP (Tamu)</h2>
@@ -48,7 +87,6 @@
           <input id="rsvpNama" type="text" required placeholder="Contoh: Bapak/Ibu Andi Wijaya"
                  class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
         </label>
-
         <div class="grid md:grid-cols-3 gap-3">
           <label class="block md:col-span-2">
             <span class="text-sm text-slate-600">Nomor Tamu</span>
@@ -60,7 +98,6 @@
             <span class="text-sm text-slate-700">Auto nomor</span>
           </label>
         </div>
-
         <div class="grid md:grid-cols-2 gap-3">
           <label class="block">
             <span class="text-sm text-slate-600">No. HP (opsional)</span>
@@ -73,26 +110,24 @@
                    class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
           </label>
         </div>
-
         <details class="rounded-lg bg-slate-50 ring-1 ring-slate-200 p-3">
           <summary class="text-sm cursor-pointer select-none">Pengaturan URL Undangan (opsional)</summary>
           <div class="pt-2 grid gap-2">
             <label class="block">
               <span class="text-sm text-slate-600">INVITE_BASE_URL</span>
-              <input id="baseUrl" type="url" placeholder="https://galuharihidayat33-create.github.io/buku_tamu/"
+              <input id="baseUrl" type="url" placeholder="https://<username>.github.io/<repo>"
                      class="mt-1 w-full rounded-lg border-slate-300 focus:border-blue-500 focus:ring-blue-500"/>
             </label>
-            <p class="text-xs text-slate-500">Jika diisi, QR berisi URL: <code>?rsvp=TOKEN&amp;n=Nama&amp;g=Nomor</code></p>
+            <p class="text-xs text-slate-500">Jika diisi, QR = <code>?rsvp=TOKEN&amp;n=Nama&amp;g=Nomor</code> pada URL ini.</p>
           </div>
         </details>
-
         <div class="flex items-center gap-3 mt-1">
           <button class="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700" type="submit">Kirim RSVP & Buat QR</button>
           <span id="rsvpStatus" class="text-sm text-slate-500"></span>
         </div>
       </form>
 
-      <!-- Preview QR/Barcode -->
+      <!-- Preview -->
       <div id="previewWrap" class="mt-4 grid md:grid-cols-2 gap-3 items-start">
         <div class="rounded-xl ring-1 ring-slate-200 p-3">
           <div class="text-sm text-slate-600 mb-1">QR/Barcode Preview</div>
@@ -121,7 +156,7 @@
       </div>
     </div>
 
-    <!-- ========== Scanner (Panitia) – html5-qrcode ========== -->
+    <!-- ========== Scanner (Panitia) ========== -->
     <div class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-lg font-semibold">Scanner Kamera (Panitia)</h2>
@@ -226,21 +261,20 @@
   </section>
 
   <footer class="text-center text-xs text-slate-500 mt-8">
-    <p>Jalankan di HTTPS/localhost. Data lokal (IndexedDB). Atur <code>INVITE_BASE_URL</code> jika ingin payload berupa URL undangan.</p>
+    <p>Jalankan di HTTPS/localhost. Data lokal (IndexedDB). Isi <code>INVITE_BASE_URL</code> (opsional) agar payload QR berupa URL undangan.</p>
   </footer>
 </div>
 
 <script>
-/* ================== KONFIG & UTIL ================== */
+/* ================== UTIL & STATE ================== */
+if (!(IS_SECURE)) document.getElementById("secureWarn").classList.remove("hidden");
+
 let INVITE_BASE_URL = ""; // diambil dari input baseUrl saat submit RSVP
 const two = n => String(n).padStart(2,"0");
 const isoToLocal = iso => { const d=new Date(iso); return `${two(d.getDate())}/${two(d.getMonth()+1)}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}`; };
 const slugify = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,32);
 const rndToken = (len=8)=>Array.from(crypto.getRandomValues(new Uint32Array(len)),n=>(n%36).toString(36)).join('');
 function beepOK(){try{const ctx=new (window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator(),g=ctx.createGain();o.type="square";o.frequency.value=880;o.connect(g);g.connect(ctx.destination);g.gain.setValueAtTime(0.05,ctx.currentTime);o.start();setTimeout(()=>{o.stop();ctx.close();},120);}catch{}}
-if (!(location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-  document.getElementById("secureWarn").classList.remove("hidden");
-}
 
 /* ================== PAYLOAD ================== */
 function buildToken(name, nomor){ return `${slugify(name||"tamu")}-${nomor||"x"}-${rndToken(4)}`; }
@@ -255,9 +289,7 @@ function buildPayload(token, name, nomor){
   return `RSVP2|${token}|${encodeURIComponent(name||"")}|${encodeURIComponent(String(nomor||""))}`;
 }
 function parseScanned(text){
-  try {
-    const u = new URL(text);
-    const tok=u.searchParams.get("rsvp");
+  try { const u=new URL(text); const tok=u.searchParams.get("rsvp");
     if (tok) return { token: tok, name: u.searchParams.get("n")||"", nomor: u.searchParams.get("g")||"" };
   } catch {}
   const m2 = /^RSVP2\|([^|]+)\|([^|]*)\|([^|]*)$/i.exec(text||"");
@@ -268,7 +300,7 @@ function parseScanned(text){
 }
 
 /* ================== IndexedDB ================== */
-const DB_NAME="bukuTamuDB_fix", STORE="tamu";
+const DB_NAME="bukuTamuDB_fix_allinone", STORE="tamu";
 let db=null;
 function openDB(){
   return new Promise((res,rej)=>{
@@ -352,73 +384,103 @@ function downloadCurrentPNG(){
 }
 function triggerDownload(url, filename){ const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); }
 
-/* ================== Scanner: html5-qrcode ================== */
+/* ================== Scanner (html5-qrcode) ================== */
 let html5QrCode=null, currentDeviceId=null, scanning=false, lastText="", lastAt=0;
 function setScanStatus(msg,isErr=false){ const el=document.getElementById("scanStatus"); el.textContent=msg; el.className="text-sm "+(isErr?"text-rose-600":"text-slate-500"); }
+
 async function listCameras(){
   const sel=document.getElementById("cameraSelect"); sel.innerHTML="";
   try{
-    const cams = await Html5Qrcode.getCameras();
-    if (!cams || cams.length===0) { sel.innerHTML=`<option value="">Tidak ada kamera (cek HTTPS & izin)</option>`; return; }
-    // pilih kamera belakang jika ada
-    let back = cams.find(c => /back|rear|environment/i.test(c.label||"")) || cams[0];
+    await waitForH5Q();
+    let cams = [];
+    if (window.Html5Qrcode?.getCameras) {
+      cams = await Html5Qrcode.getCameras();
+      cams = cams.map(c => ({ id:c.id, label:c.label }));
+    } else if (navigator.mediaDevices?.enumerateDevices) {
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      cams = devs.filter(d => d.kind === "videoinput")
+                 .map((d,i)=>({ id:d.deviceId, label:d.label || `Kamera ${i+1}` }));
+    } else {
+      throw new Error("Camera API tidak tersedia");
+    }
+    if (!cams.length) { sel.innerHTML=`<option value="">Tidak ada kamera (cek izin)</option>`; return; }
+    const back = cams.find(c => /back|rear|environment/i.test(c.label||"")) || cams[0];
     cams.forEach((c,i)=>{ const opt=document.createElement("option"); opt.value=c.id; opt.textContent=c.label||`Kamera ${i+1}`; sel.appendChild(opt); });
     currentDeviceId = back.id; sel.value = currentDeviceId;
     sel.onchange = e => { currentDeviceId = e.target.value; if(scanning){ stopScan().then(startScan); } };
-  }catch(e){ sel.innerHTML=`<option value="">Gagal membaca kamera: ${e?.name||e}</option>`; }
+  }catch(e){
+    sel.innerHTML = `<option value="">Gagal membaca kamera: ${e?.name||e}</option>`;
+  }
 }
+
 async function startScan(){
+  if (!IS_SECURE) { setScanStatus("Harus HTTPS/localhost.", true); return; }
+
+  await waitForH5Q();
+  if (!window.Html5Qrcode) {
+    setScanStatus("Scanner tidak termuat (CDN lambat/diblok). Coba refresh/ganti jaringan.", true);
+    return;
+  }
+
   if (scanning) return;
   const readerDivId = "reader";
-  if (!html5QrCode) html5QrCode = new Html5Qrcode(readerDivId, { formatsToSupport: [
-    Html5QrcodeSupportedFormats.QR_CODE,
-    Html5QrcodeSupportedFormats.CODE_128,
-    Html5QrcodeSupportedFormats.CODE_39,
-    Html5QrcodeSupportedFormats.EAN_13,
-    Html5QrcodeSupportedFormats.EAN_8,
-    Html5QrcodeSupportedFormats.UPC_A,
-    Html5QrcodeSupportedFormats.UPC_E,
-    Html5QrcodeSupportedFormats.ITF
-  ]});
+  if (!html5QrCode) {
+    const opts = window.Html5QrcodeSupportedFormats ? {
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.ITF
+      ]
+    } : undefined;
+    html5QrCode = new Html5Qrcode(readerDivId, opts);
+  }
+
   lastText=""; lastAt=0;
   try{
-    const config = { fps: 15, qrbox: { width: 250, height: 250 }, rememberLastUsedCamera: false };
     const cameraConfig = currentDeviceId ? { deviceId: { exact: currentDeviceId } } : { facingMode: { ideal: "environment" } };
+    const config = { fps: 15, qrbox: { width: 250, height: 250 } };
     await html5QrCode.start(cameraConfig, config,
       (decodedText) => {
         const now=Date.now();
-        if (decodedText === lastText && (now - lastAt) < 1000) return; // anti spam
-        lastText = decodedText; lastAt = now;
-        onScan(decodedText);
+        if (decodedText === lastText && (now-lastAt)<1000) return;
+        lastText=decodedText; lastAt=now; onScan(decodedText);
       },
-      (errMsg) => { /* per-frame error ignored */ }
+      () => {}
     );
     scanning = true; setScanStatus("Kamera aktif.");
-  }catch(e){
+  } catch(e){
     setScanStatus(mapMediaError(e), true);
   }
 }
 async function stopScan(){
   if (!html5QrCode || !scanning) return;
-  try{
-    await html5QrCode.stop(); await html5QrCode.clear();
-  }catch{} finally{ scanning=false; setScanStatus("Kamera berhenti."); }
+  try{ await html5QrCode.stop(); await html5QrCode.clear(); }
+  catch{} finally{ scanning=false; setScanStatus("Kamera berhenti."); }
 }
 function mapMediaError(e){
-  const n=e?.name||""; if(n==="NotAllowedError")return" akses kamera ditolak (Allow di site settings)";
-  if(n==="NotFoundError")return" kamera tidak ditemukan";
-  if(n==="NotReadableError")return" kamera dipakai app lain (tutup Zoom/WA/Teams)";
-  if(n==="OverconstrainedError")return" constraint tidak cocok (coba pilih kamera lain)";
-  if(n==="SecurityError")return" origin tidak aman (pakai HTTPS/localhost)";
+  const n=e?.name||""; if(n==="NotAllowedError")return"akses kamera ditolak (Allow di site settings)";
+  if(n==="NotFoundError")return"kamera tidak ditemukan";
+  if(n==="NotReadableError")return"kamera dipakai app lain (tutup Zoom/WA/Teams)";
+  if(n==="OverconstrainedError")return"constraint tidak cocok (pilih kamera lain)";
+  if(n==="SecurityError")return"origin tidak aman (pakai HTTPS/localhost)";
   return `Gagal mengakses kamera: ${n||e}`;
 }
-async function testCameraBasic(){
-  try{
-    const s = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:"environment"} }, audio:false });
+async function testCameraBasic() {
+  if (!IS_SECURE) { alert('Kamera diblokir karena bukan HTTPS/localhost.\nFix: pakai GitHub Pages/localhost.'); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('getUserMedia tidak tersedia. Coba update browser.'); return;
+  }
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'} }, audio:false });
     s.getTracks().forEach(t=>t.stop());
-    alert("Kamera OK & izin diberikan.");
-  }catch(e){
-    alert("Gagal akses kamera:\n"+(e.name||e)+": "+(e.message||"")+"\n\nTips: pakai HTTPS/localhost & Allow camera.");
+    alert('Kamera OK & izin diberikan.');
+  } catch (e) {
+    alert('Gagal akses kamera: ' + (e.name||e) + '\nTips: Allow camera & tutup app lain.');
   }
 }
 function onScan(raw){
@@ -463,7 +525,6 @@ async function handleSave(markPresent=false){
 document.getElementById("rsvpForm").addEventListener("submit", async (e)=>{
   e.preventDefault();
   INVITE_BASE_URL = (document.getElementById("baseUrl").value||"").trim();
-
   const nama  = document.getElementById("rsvpNama").value.trim();
   let nomor   = document.getElementById("rsvpNomor").value.trim();
   const telp  = document.getElementById("rsvpTelp").value.trim();
@@ -476,21 +537,18 @@ document.getElementById("rsvpForm").addEventListener("submit", async (e)=>{
   lastToken   = buildToken(nama, nomor);
   lastPayload = buildPayload(lastToken, nama, nomor);
 
-  // Render QR / Barcode + simpan draft
   renderQRorBarcode(lastPayload);
   document.getElementById("payloadBox").textContent = lastPayload;
   document.getElementById("tokenBox").textContent   = lastToken;
   document.getElementById("nameBox").textContent    = nama;
   document.getElementById("numBox").textContent     = nomor;
 
-  // Simpan sebagai draft RSVP
   const exists=await findByBarcode(lastToken);
   if(exists.length===0){
     await addEntry({ waktu:new Date().toISOString(), barcode:lastToken, nama, nomor, telp, catatan:catat, hadir:false, waktuHadir:null, remoteStatus:"" });
     await refreshTable();
   }
 
-  // Pre-fill form panitia
   document.getElementById("barcodeValue").value = lastToken;
   document.getElementById("nama").value = nama;
   document.getElementById("nomorTamu").value = nomor;
@@ -511,10 +569,12 @@ document.getElementById("testCamBtn").addEventListener("click", testCameraBasic)
 document.getElementById("fileInput").addEventListener("change", async (e)=>{
   const f=e.target.files?.[0]; if(!f) return;
   try{
-    // html5-qrcode juga bisa decode file langsung (khusus QR & beberapa format)
-    const tmp = new Html5Qrcode(/* element id: create temp */ document.createElement("div"));
+    await waitForH5Q();
+    if (!window.Html5Qrcode) throw new Error("html5-qrcode tidak termuat");
+    const tmpDiv = document.createElement("div");
+    const tmp = new Html5Qrcode(tmpDiv); // offscreen
     const decoded = await tmp.scanFile(f, true);
-    tmp.clear(); // cleanup
+    await tmp.clear();
     document.getElementById("lastResult").textContent = decoded;
     onScan(decoded);
   }catch(err){ setScanStatus("Gagal decode gambar.", true); }
@@ -540,6 +600,11 @@ document.getElementById("markPresentBtn").addEventListener("click", async ()=>{ 
   db = await openDB();
   await listCameras();
   await refreshTable();
+
+  // disable tombol kamera bila non-secure
+  if (!IS_SECURE) {
+    ["startBtn","testCamBtn"].forEach(id => { const el=document.getElementById(id); if(el){ el.disabled=true; el.title='Buka via HTTPS/localhost'; }});
+  }
 })();
 </script>
 </body>
