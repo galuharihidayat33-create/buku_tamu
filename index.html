@@ -3,82 +3,31 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>RSVP + Buku Tamu (All-in-One, Fixed)</title>
+<title>RSVP + Buku Tamu (Native Scanner, No CDN)</title>
 
 <!-- Tailwind -->
 <script src="https://cdn.tailwindcss.com"></script>
 
-<!-- QR Generator -->
+<!-- QR Generator (hanya untuk membuat QR tamu) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<!-- Barcode Generator -->
+<!-- Barcode Generator (untuk opsi Code128 saat generate) -->
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-
-<!-- Loader html5-qrcode dgn fallback CDN + flag siap -->
-<!-- html5-qrcode: load locally (no CDN) -->
-<script src="./vendor/html5-qrcode.min.js"></script>
-
-<!-- OPTIONAL fallback kalau file lokal gagal (mis. path salah) -->
-<script>
-  if (!window.Html5Qrcode) {
-    var s = document.createElement('script');
-    s.src = "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.10/minified/html5-qrcode.min.js";
-    s.defer = true;
-    s.onload = () => window.__H5Q_READY = true;
-    document.head.appendChild(s);
-  } else {
-    window.__H5Q_READY = true;
-  }
-  // helper tetap boleh dipakai
-  function waitForH5Q(timeout=5000){
-    return new Promise((resolve)=> {
-      const t0 = Date.now();
-      (function tick(){
-        if (window.__H5Q_READY || window.Html5Qrcode) return resolve();
-        if (Date.now()-t0 > timeout) return resolve();
-        setTimeout(tick, 60);
-      })();
-    });
-  }
-</script>
-
-
-<!-- Secure check + polyfill + helper tunggu library -->
-<script>
-const IS_SECURE = location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
-if (!("mediaDevices" in navigator) || !("getUserMedia" in navigator.mediaDevices)) {
-  const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
-  if (legacy) {
-    navigator.mediaDevices = {
-      getUserMedia: (c) => new Promise((res, rej) => legacy.call(navigator, c, res, rej))
-    };
-  }
-}
-function waitForH5Q(timeout=5000){
-  return new Promise((resolve)=> {
-    const t0 = Date.now();
-    (function tick(){
-      if (window.__H5Q_READY || window.Html5Qrcode) return resolve();
-      if (window.__H5Q_LOAD_ERR || Date.now()-t0 > timeout) return resolve();
-      setTimeout(tick, 60);
-    })();
-  });
-}
-</script>
 
 <style>
   canvas, img { image-rendering: crisp-edges; }
   .badge { padding:2px 8px; border-radius:999px; font-size:12px }
+  #videoEl { width: 100%; border-radius: 0.75rem; object-fit: cover; }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
 <div class="max-w-6xl mx-auto p-4 md:p-8">
   <header class="flex items-center justify-between mb-6">
     <div>
-      <h1 class="text-2xl md:text-3xl font-semibold">RSVP + Buku Tamu (Fixed)</h1>
-      <p class="text-sm text-slate-500">RSVP → generate QR/Barcode (Nama + Nomor + Token), simpan ke IndexedDB, scan saat acara.</p>
+      <h1 class="text-2xl md:text-3xl font-semibold">RSVP + Buku Tamu (Native Scanner)</h1>
+      <p class="text-sm text-slate-500">RSVP → generate QR/Barcode (Nama + Nomor + Token), simpan lokal (IndexedDB), scan pakai <b>BarcodeDetector</b> (tanpa CDN).</p>
       <div id="secureWarn" class="mt-2 hidden">
         <span class="badge bg-rose-100 text-rose-700 ring-1 ring-rose-200">PENTING</span>
-        <span class="text-sm text-rose-700">Jalankan di HTTPS atau http://localhost agar kamera bisa dipakai.</span>
+        <span class="text-sm text-rose-700">Harus HTTPS atau http://localhost agar kamera bisa dipakai.</span>
       </div>
     </div>
     <div class="flex items-center gap-2">
@@ -166,7 +115,7 @@ function waitForH5Q(timeout=5000){
       </div>
     </div>
 
-    <!-- ========== Scanner (Panitia) ========== -->
+    <!-- ========== Scanner (Panitia) – Native ========== -->
     <div class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 p-4">
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-lg font-semibold">Scanner Kamera (Panitia)</h2>
@@ -271,19 +220,20 @@ function waitForH5Q(timeout=5000){
   </section>
 
   <footer class="text-center text-xs text-slate-500 mt-8">
-    <p>Jalankan di HTTPS/localhost. Data lokal (IndexedDB). Isi <code>INVITE_BASE_URL</code> (opsional) agar payload QR berupa URL undangan.</p>
+    <p>HTTPS/localhost wajib untuk kamera. Data disimpan lokal (IndexedDB). Isi <code>INVITE_BASE_URL</code> (opsional) agar payload QR berupa URL undangan.</p>
   </footer>
 </div>
 
 <script>
-/* ================== UTIL & STATE ================== */
-if (!(IS_SECURE)) document.getElementById("secureWarn").classList.remove("hidden");
+/* ================== ENV & UTIL ================== */
+const IS_SECURE = location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
+if (!IS_SECURE) document.getElementById("secureWarn").classList.remove("hidden");
+const two=n=>String(n).padStart(2,"0");
+const isoToLocal=iso=>{const d=new Date(iso);return `${two(d.getDate())}/${two(d.getMonth()+1)}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}`;}
+const slugify=s=>s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,32);
+const rndToken=(len=8)=>Array.from(crypto.getRandomValues(new Uint32Array(len)),n=>(n%36).toString(36)).join('');
+let INVITE_BASE_URL="";
 
-let INVITE_BASE_URL = ""; // diambil dari input baseUrl saat submit RSVP
-const two = n => String(n).padStart(2,"0");
-const isoToLocal = iso => { const d=new Date(iso); return `${two(d.getDate())}/${two(d.getMonth()+1)}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}`; };
-const slugify = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,32);
-const rndToken = (len=8)=>Array.from(crypto.getRandomValues(new Uint32Array(len)),n=>(n%36).toString(36)).join('');
 function beepOK(){try{const ctx=new (window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator(),g=ctx.createGain();o.type="square";o.frequency.value=880;o.connect(g);g.connect(ctx.destination);g.gain.setValueAtTime(0.05,ctx.currentTime);o.start();setTimeout(()=>{o.stop();ctx.close();},120);}catch{}}
 
 /* ================== PAYLOAD ================== */
@@ -302,32 +252,24 @@ function parseScanned(text){
   try { const u=new URL(text); const tok=u.searchParams.get("rsvp");
     if (tok) return { token: tok, name: u.searchParams.get("n")||"", nomor: u.searchParams.get("g")||"" };
   } catch {}
-  const m2 = /^RSVP2\|([^|]+)\|([^|]*)\|([^|]*)$/i.exec(text||"");
-  if (m2) return { token:m2[1], name: decodeURIComponent(m2[2]||""), nomor: decodeURIComponent(m2[3]||"") };
-  const m = /^RSVP\|([^|]+)\|?(.*)$/i.exec(text||"");
-  if (m)  return { token:m[1], name: decodeURIComponent(m[2]||""), nomor: "" };
+  const m2=/^RSVP2\|([^|]+)\|([^|]*)\|([^|]*)$/i.exec(text||"");
+  if(m2) return { token:m2[1], name: decodeURIComponent(m2[2]||""), nomor: decodeURIComponent(m2[3]||"") };
+  const m=/^RSVP\|([^|]+)\|?(.*)$/i.exec(text||"");
+  if(m) return { token:m[1], name: decodeURIComponent(m[2]||""), nomor: "" };
   return { token:text, name:"", nomor:"" };
 }
 
 /* ================== IndexedDB ================== */
-const DB_NAME="bukuTamuDB_fix_allinone", STORE="tamu";
-let db=null;
-function openDB(){
-  return new Promise((res,rej)=>{
-    const r=indexedDB.open(DB_NAME,1);
-    r.onupgradeneeded=()=>{const _db=r.result; const s=_db.createObjectStore(STORE,{keyPath:"id",autoIncrement:true});
-      s.createIndex("barcode","barcode"); s.createIndex("waktu","waktu"); s.createIndex("nomor","nomor"); };
-    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
-  });
-}
-const tx = (mode)=>db.transaction(STORE,mode).objectStore(STORE);
-const addEntry=(e)=>new Promise((res,rej)=>{const q=tx("readwrite").add(e); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);});
-const putEntry=(e)=>new Promise((res,rej)=>{const q=tx("readwrite").put(e); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);});
-const getAll =()=>new Promise((res,rej)=>{const q=tx("readonly").getAll(); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);});
-const getById=(id)=>new Promise((res,rej)=>{const q=tx("readonly").get(id); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);});
-const findByBarcode=(b)=>new Promise((res,rej)=>{const q=tx("readonly").index("barcode").getAll(b); q.onsuccess=()=>res(q.result||[]); q.onerror=()=>rej(q.error);});
-const delById=(id)=>new Promise((res,rej)=>{const q=tx("readwrite").delete(id); q.onsuccess=()=>res(true); q.onerror=()=>rej(q.error);});
-const clearAll=()=>new Promise((res,rej)=>{const q=tx("readwrite").clear(); q.onsuccess=()=>res(true); q.onerror=()=>rej(q.error);});
+const DB_NAME="bukuTamuDB_native", STORE="tamu"; let db=null;
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,1);r.onupgradeneeded=()=>{const _db=r.result;const s=_db.createObjectStore(STORE,{keyPath:"id",autoIncrement:true});s.createIndex("barcode","barcode");s.createIndex("waktu","waktu");s.createIndex("nomor","nomor");};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+const tx=(mode)=>db.transaction(STORE,mode).objectStore(STORE);
+const addEntry=(e)=>new Promise((res,rej)=>{const q=tx("readwrite").add(e);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
+const putEntry=(e)=>new Promise((res,rej)=>{const q=tx("readwrite").put(e);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
+const getAll=()=>new Promise((res,rej)=>{const q=tx("readonly").getAll();q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
+const getById=(id)=>new Promise((res,rej)=>{const q=tx("readonly").get(id);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});
+const findByBarcode=(b)=>new Promise((res,rej)=>{const q=tx("readonly").index("barcode").getAll(b);q.onsuccess=()=>res(q.result||[]);q.onerror=()=>rej(q.error);});
+const delById=(id)=>new Promise((res,rej)=>{const q=tx("readwrite").delete(id);q.onsuccess=()=>res(true);q.onerror=()=>rej(q.error);});
+const clearAll=()=>new Promise((res,rej)=>{const q=tx("readwrite").clear();q.onsuccess=()=>res(true);q.onerror=()=>rej(q.error);});
 async function getNextNomor(){ const rows=await getAll(); const ns=rows.map(r=>Number(r.nomor)).filter(Number.isFinite); return ns.length?Math.max(...ns)+1:1; }
 
 /* ================== Tabel ================== */
@@ -363,144 +305,147 @@ function renderTable(rows){
 async function refreshTable(){ renderTable(await getAll()); }
 
 /* ================== Export CSV ================== */
-function toCSV(rows){
-  const headers=["id","waktu","barcode","nomor","nama","telp","catatan","hadir","waktuHadir","remoteStatus"];
-  const esc=v=>v==null?"":`"${String(v).replace(/"/g,'""')}"`;
-  return [headers.map(esc).join(",")].concat(rows.map(r=>headers.map(h=>esc(r[h])).join(","))).join("\r\n");
-}
+function toCSV(rows){ const headers=["id","waktu","barcode","nomor","nama","telp","catatan","hadir","waktuHadir","remoteStatus"]; const esc=v=>v==null?"":`"${String(v).replace(/"/g,'""')}"`; return [headers.map(esc).join(",")].concat(rows.map(r=>headers.map(h=>esc(r[h])).join(","))).join("\r\n"); }
 function download(filename,text){ const blob=new Blob([text],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
 
-/* ================== Generator QR/Barcode ================== */
+/* ================== Generate QR/Barcode ================== */
 let lastToken="", lastPayload="";
 function renderQRorBarcode(payload){
-  const type = document.querySelector('input[name="qrtype"]:checked')?.value || "qr";
-  const wrap = document.getElementById("qrContainer"); wrap.innerHTML="";
-  if (type === "qr") {
-    new QRCode(wrap,{text:payload,width:260,height:260,correctLevel:QRCode.CorrectLevel.M});
-  } else {
-    const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
-    wrap.appendChild(svg);
-    JsBarcode(svg, payload, {format:"code128", width:2, height:120, margin:10, displayValue:false});
-  }
-  document.getElementById("downloadQrBtn").disabled = false;
+  const type=document.querySelector('input[name="qrtype"]:checked')?.value||"qr";
+  const wrap=document.getElementById("qrContainer"); wrap.innerHTML="";
+  if(type==="qr"){ new QRCode(wrap,{text:payload,width:260,height:260,correctLevel:QRCode.CorrectLevel.M}); }
+  else{ const svg=document.createElementNS("http://www.w3.org/2000/svg","svg"); wrap.appendChild(svg); JsBarcode(svg,payload,{format:"code128",width:2,height:120,margin:10,displayValue:false}); }
+  document.getElementById("downloadQrBtn").disabled=false;
 }
 function downloadCurrentPNG(){
-  const cont=document.getElementById("qrContainer");
-  const img=cont.querySelector("img");
-  if(img){ triggerDownload(img.src, `RSVP-${lastToken}.png`); return; }
-  const svg=cont.querySelector("svg");
-  if(svg){ const xml=new XMLSerializer().serializeToString(svg); const dataUrl='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml); triggerDownload(dataUrl, `RSVP-${lastToken}.png`); return; }
+  const cont=document.getElementById("qrContainer"); const img=cont.querySelector("img");
+  if(img){ triggerDownload(img.src,`RSVP-${lastToken}.png`); return; }
+  const svg=cont.querySelector("svg"); if(svg){ const xml=new XMLSerializer().serializeToString(svg); const dataUrl='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml); triggerDownload(dataUrl,`RSVP-${lastToken}.png`); return; }
   alert("Tidak ada gambar untuk diunduh.");
 }
-function triggerDownload(url, filename){ const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); }
+function triggerDownload(url,filename){ const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); }
 
-/* ================== Scanner (html5-qrcode) ================== */
-let html5QrCode=null, currentDeviceId=null, scanning=false, lastText="", lastAt=0;
+/* ================== Native Scanner (BarcodeDetector) ================== */
+let stream=null, detector=null, rafId=null, scanning=false, lastText="", lastAt=0, currentDeviceId=null;
+
 function setScanStatus(msg,isErr=false){ const el=document.getElementById("scanStatus"); el.textContent=msg; el.className="text-sm "+(isErr?"text-rose-600":"text-slate-500"); }
 
 async function listCameras(){
   const sel=document.getElementById("cameraSelect"); sel.innerHTML="";
   try{
-    await waitForH5Q();
-    let cams = [];
-    if (window.Html5Qrcode?.getCameras) {
-      cams = await Html5Qrcode.getCameras();
-      cams = cams.map(c => ({ id:c.id, label:c.label }));
-    } else if (navigator.mediaDevices?.enumerateDevices) {
-      const devs = await navigator.mediaDevices.enumerateDevices();
-      cams = devs.filter(d => d.kind === "videoinput")
-                 .map((d,i)=>({ id:d.deviceId, label:d.label || `Kamera ${i+1}` }));
-    } else {
-      throw new Error("Camera API tidak tersedia");
-    }
-    if (!cams.length) { sel.innerHTML=`<option value="">Tidak ada kamera (cek izin)</option>`; return; }
-    const back = cams.find(c => /back|rear|environment/i.test(c.label||"")) || cams[0];
-    cams.forEach((c,i)=>{ const opt=document.createElement("option"); opt.value=c.id; opt.textContent=c.label||`Kamera ${i+1}`; sel.appendChild(opt); });
-    currentDeviceId = back.id; sel.value = currentDeviceId;
-    sel.onchange = e => { currentDeviceId = e.target.value; if(scanning){ stopScan().then(startScan); } };
-  }catch(e){
-    sel.innerHTML = `<option value="">Gagal membaca kamera: ${e?.name||e}</option>`;
-  }
+    // Minta izin dulu agar label kamera terbaca
+    try{
+      const tmp=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+      tmp.getTracks().forEach(t=>t.stop());
+    }catch{}
+    const devs=await navigator.mediaDevices.enumerateDevices();
+    const cams=devs.filter(d=>d.kind==="videoinput");
+    if(cams.length===0){ sel.innerHTML=`<option value="">Tidak ada kamera</option>`; return; }
+    const back=cams.find(c=>/back|rear|environment/i.test(c.label||""))||cams[0];
+    cams.forEach((d,i)=>{const opt=document.createElement("option"); opt.value=d.deviceId; opt.textContent=d.label||`Kamera ${i+1}`; sel.appendChild(opt);});
+    currentDeviceId=back.deviceId; sel.value=currentDeviceId;
+    sel.onchange=e=>{ currentDeviceId=e.target.value; if(scanning){ stopScan().then(startScan); } };
+  }catch(e){ sel.innerHTML=`<option value="">Gagal membaca kamera: ${e?.name||e}</option>`; }
 }
 
 async function startScan(){
-  if (!IS_SECURE) { setScanStatus("Harus HTTPS/localhost.", true); return; }
+  if(!IS_SECURE){ setScanStatus("Harus HTTPS/localhost.",true); return; }
+  if(!navigator.mediaDevices?.getUserMedia){ setScanStatus("getUserMedia tidak tersedia di browser ini.",true); return; }
+  if(!("BarcodeDetector" in window)){ setScanStatus("Browser belum mendukung BarcodeDetector. Coba Chrome/Edge Android terbaru.",true); return; }
 
-  await waitForH5Q();
-  if (!window.Html5Qrcode) {
-    setScanStatus("Scanner tidak termuat (CDN lambat/diblok). Coba refresh/ganti jaringan.", true);
-    return;
-  }
-
-  if (scanning) return;
-  const readerDivId = "reader";
-  if (!html5QrCode) {
-    const opts = window.Html5QrcodeSupportedFormats ? {
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.QR_CODE,
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E,
-        Html5QrcodeSupportedFormats.ITF
-      ]
-    } : undefined;
-    html5QrCode = new Html5Qrcode(readerDivId, opts);
-  }
-
-  lastText=""; lastAt=0;
+  // pilih format yang didukung device
+  let formatsWanted=['qr_code','code_128','code_39','ean_13','ean_8','upc_a','upc_e','itf','codabar'];
   try{
-    const cameraConfig = currentDeviceId ? { deviceId: { exact: currentDeviceId } } : { facingMode: { ideal: "environment" } };
-    const config = { fps: 15, qrbox: { width: 250, height: 250 } };
-    await html5QrCode.start(cameraConfig, config,
-      (decodedText) => {
-        const now=Date.now();
-        if (decodedText === lastText && (now-lastAt)<1000) return;
-        lastText=decodedText; lastAt=now; onScan(decodedText);
-      },
-      () => {}
-    );
-    scanning = true; setScanStatus("Kamera aktif.");
-  } catch(e){
-    setScanStatus(mapMediaError(e), true);
+    const supported=await BarcodeDetector.getSupportedFormats();
+    formatsWanted=formatsWanted.filter(f=>supported.includes(f));
+    if(formatsWanted.length===0) formatsWanted=['qr_code']; // minimal QR
+  }catch{ /* ignore */ }
+
+  detector=new BarcodeDetector({formats:formatsWanted});
+
+  try{
+    const constraints=currentDeviceId?{video:{deviceId:{exact:currentDeviceId}},audio:false}:{video:{facingMode:{ideal:"environment"}},audio:false};
+    stream=await navigator.mediaDevices.getUserMedia(constraints);
+
+    // buat elemen video di #reader
+    const reader=document.getElementById("reader");
+    reader.innerHTML="";
+    const video=document.createElement("video");
+    video.id="videoEl"; video.setAttribute("playsinline",""); video.muted=true; video.autoplay=true;
+    video.srcObject=stream; await video.play();
+    reader.appendChild(video);
+
+    scanning=true; setScanStatus(`Kamera aktif (${formatsWanted.join(", ")}).`);
+
+    const tick=async()=>{
+      if(!scanning) return;
+      try{
+        const codes=await detector.detect(video);
+        if(codes && codes.length){
+          const text=codes[0].rawValue;
+          const now=Date.now();
+          if(text!==lastText || now-lastAt>800){
+            lastText=text; lastAt=now; onScan(text);
+          }
+        }
+      }catch{}
+      rafId=requestAnimationFrame(tick);
+    };
+    tick();
+  }catch(e){
+    setScanStatus(mapMediaError(e),true);
   }
 }
+
 async function stopScan(){
-  if (!html5QrCode || !scanning) return;
-  try{ await html5QrCode.stop(); await html5QrCode.clear(); }
-  catch{} finally{ scanning=false; setScanStatus("Kamera berhenti."); }
+  scanning=false;
+  if(rafId) cancelAnimationFrame(rafId);
+  if(stream){ try{ stream.getTracks().forEach(t=>t.stop()); }catch{} stream=null; }
+  document.getElementById("reader").innerHTML='<span class="text-sm">Klik “Mulai Scan” untuk menyalakan kamera</span>';
+  setScanStatus("Kamera berhenti.");
 }
+
 function mapMediaError(e){
-  const n=e?.name||""; if(n==="NotAllowedError")return"akses kamera ditolak (Allow di site settings)";
-  if(n==="NotFoundError")return"kamera tidak ditemukan";
-  if(n==="NotReadableError")return"kamera dipakai app lain (tutup Zoom/WA/Teams)";
-  if(n==="OverconstrainedError")return"constraint tidak cocok (pilih kamera lain)";
-  if(n==="SecurityError")return"origin tidak aman (pakai HTTPS/localhost)";
-  return `Gagal mengakses kamera: ${n||e}`;
+  const n=e?.name||"";
+  if(n==="NotAllowedError") return "Akses kamera ditolak (Allow di site settings).";
+  if(n==="NotFoundError") return "Kamera tidak ditemukan.";
+  if(n==="NotReadableError") return "Kamera dipakai app lain (tutup Zoom/WA/Teams).";
+  if(n==="OverconstrainedError") return "Constraint tidak cocok (pilih kamera lain).";
+  if(n==="SecurityError") return "Origin tidak aman (pakai HTTPS/localhost).";
+  return `Gagal akses kamera: ${n||e}`;
 }
-async function testCameraBasic() {
-  if (!IS_SECURE) { alert('Kamera diblokir karena bukan HTTPS/localhost.\nFix: pakai GitHub Pages/localhost.'); return; }
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    alert('getUserMedia tidak tersedia. Coba update browser.'); return;
-  }
-  try {
-    const s = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'} }, audio:false });
+
+async function testCameraBasic(){
+  if(!IS_SECURE){ alert("Bukan HTTPS/localhost."); return; }
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});
     s.getTracks().forEach(t=>t.stop());
-    alert('Kamera OK & izin diberikan.');
-  } catch (e) {
-    alert('Gagal akses kamera: ' + (e.name||e) + '\nTips: Allow camera & tutup app lain.');
-  }
+    alert("Kamera OK & izin diberikan.");
+  }catch(e){ alert("Gagal akses kamera: "+(e.name||e)); }
 }
+
+async function scanImageFile(file){
+  try{
+    if(!("BarcodeDetector" in window)){ setScanStatus("Device tidak mendukung scan file tanpa library eksternal.",true); return; }
+    const bmp = await createImageBitmap(file);
+    // gunakan format minimal QR agar andal
+    let fmts=['qr_code']; 
+    try{ const sup=await BarcodeDetector.getSupportedFormats(); fmts=fmts.filter(f=>sup.includes(f)); }catch{}
+    const det=new BarcodeDetector({formats:fmts.length?fmts:['qr_code']});
+    const res=await det.detect(bmp);
+    if(res && res.length){ onScan(res[0].rawValue); setScanStatus("Gambar terdeteksi."); }
+    else setScanStatus("Tidak terdeteksi dari gambar.",true);
+  }catch{ setScanStatus("Gagal decode gambar.",true); }
+}
+
 function onScan(raw){
   beepOK();
-  document.getElementById("lastResult").textContent = raw;
-  const p = parseScanned(raw);
-  document.getElementById("barcodeValue").value = p.token || raw;
-  if (p.name)  document.getElementById("nama").value = p.name;
-  if (p.nomor) document.getElementById("nomorTamu").value = p.nomor;
-  setStatus("Kode terdeteksi. Klik Simpan/Perbarui atau Tandai Hadir.", false);
+  document.getElementById("lastResult").textContent=raw;
+  const p=parseScanned(raw);
+  document.getElementById("barcodeValue").value=p.token||raw;
+  if(p.name)  document.getElementById("nama").value=p.name;
+  if(p.nomor) document.getElementById("nomorTamu").value=p.nomor;
+  setStatus("Kode terdeteksi. Klik Simpan/Perbarui atau Tandai Hadir.",false);
 }
 
 /* ================== Form Panitia ================== */
@@ -516,17 +461,12 @@ async function handleSave(markPresent=false){
   const exists=await findByBarcode(barcode);
   if(exists.length>0){
     const row=exists[0];
-    row.nama = nama || row.nama;
-    row.nomor = nomor || row.nomor;
-    row.telp = telp || row.telp;
-    row.catatan = catatan || row.catatan;
+    row.nama=nama||row.nama; row.nomor=nomor||row.nomor; row.telp=telp||row.telp; row.catatan=catatan||row.catatan;
     if(markPresent){ row.hadir=true; row.waktuHadir=new Date().toISOString(); }
-    await putEntry(row);
-    setStatus(`Data diperbarui${markPresent?" & ditandai hadir":""}.`);
-  } else {
+    await putEntry(row); setStatus(`Data diperbarui${markPresent?" & ditandai hadir":""}.`);
+  }else{
     const entry={ waktu:new Date().toISOString(), barcode, nama, nomor, telp, catatan, hadir:!!markPresent, waktuHadir: markPresent? new Date().toISOString(): null, remoteStatus:"" };
-    await addEntry(entry);
-    setStatus("Data tersimpan.");
+    await addEntry(entry); setStatus("Data tersimpan.");
   }
   refreshTable();
 }
@@ -534,24 +474,24 @@ async function handleSave(markPresent=false){
 /* ================== RSVP Submit ================== */
 document.getElementById("rsvpForm").addEventListener("submit", async (e)=>{
   e.preventDefault();
-  INVITE_BASE_URL = (document.getElementById("baseUrl").value||"").trim();
-  const nama  = document.getElementById("rsvpNama").value.trim();
-  let nomor   = document.getElementById("rsvpNomor").value.trim();
-  const telp  = document.getElementById("rsvpTelp").value.trim();
-  const catat = document.getElementById("rsvpCatatan").value.trim();
-  const auto  = document.getElementById("autoNomor").checked;
+  INVITE_BASE_URL=(document.getElementById("baseUrl").value||"").trim();
+  const nama=document.getElementById("rsvpNama").value.trim();
+  let nomor=document.getElementById("rsvpNomor").value.trim();
+  const telp=document.getElementById("rsvpTelp").value.trim();
+  const catat=document.getElementById("rsvpCatatan").value.trim();
+  const auto=document.getElementById("autoNomor").checked;
 
-  if(!nama){ setRSVPStatus("Nama wajib diisi.", true); clearPreview(); return; }
-  if(auto || !nomor){ nomor = String(await getNextNomor()); document.getElementById("rsvpNomor").value = nomor; }
+  if(!nama){ setRSVPStatus("Nama wajib diisi.",true); clearPreview(); return; }
+  if(auto || !nomor){ nomor=String(await getNextNomor()); document.getElementById("rsvpNomor").value=nomor; }
 
-  lastToken   = buildToken(nama, nomor);
-  lastPayload = buildPayload(lastToken, nama, nomor);
+  lastToken=buildToken(nama,nomor);
+  lastPayload=buildPayload(lastToken,nama,nomor);
 
   renderQRorBarcode(lastPayload);
-  document.getElementById("payloadBox").textContent = lastPayload;
-  document.getElementById("tokenBox").textContent   = lastToken;
-  document.getElementById("nameBox").textContent    = nama;
-  document.getElementById("numBox").textContent     = nomor;
+  document.getElementById("payloadBox").textContent=lastPayload;
+  document.getElementById("tokenBox").textContent=lastToken;
+  document.getElementById("nameBox").textContent=nama;
+  document.getElementById("numBox").textContent=nomor;
 
   const exists=await findByBarcode(lastToken);
   if(exists.length===0){
@@ -559,63 +499,32 @@ document.getElementById("rsvpForm").addEventListener("submit", async (e)=>{
     await refreshTable();
   }
 
-  document.getElementById("barcodeValue").value = lastToken;
-  document.getElementById("nama").value = nama;
-  document.getElementById("nomorTamu").value = nomor;
-  document.getElementById("telp").value = telp;
-  document.getElementById("catatan").value = catat;
+  document.getElementById("barcodeValue").value=lastToken;
+  document.getElementById("nama").value=nama;
+  document.getElementById("nomorTamu").value=nomor;
+  document.getElementById("telp").value=telp;
+  document.getElementById("catatan").value=catat;
 
-  setRSVPStatus("RSVP tersimpan & QR dibuat. Silakan unduh PNG.", false);
+  setRSVPStatus("RSVP tersimpan & QR dibuat. Silakan unduh PNG.",false);
 });
 function setRSVPStatus(msg,isErr=false){ const el=document.getElementById("rsvpStatus"); el.textContent=msg; el.className="text-sm "+(isErr?"text-rose-600":"text-slate-500"); }
-function clearPreview(){ document.getElementById("qrContainer").innerHTML=""; document.getElementById("payloadBox").textContent="—"; document.getElementById("tokenBox").textContent="—"; document.getElementById("nameBox").textContent="—"; document.getElementById("numBox").textContent="—"; document.getElementById("downloadQrBtn").disabled = true; }
-document.getElementById("downloadQrBtn").addEventListener("click", ()=>downloadCurrentPNG());
+function clearPreview(){ document.getElementById("qrContainer").innerHTML=""; document.getElementById("payloadBox").textContent="—"; document.getElementById("tokenBox").textContent="—"; document.getElementById("nameBox").textContent="—"; document.getElementById("numBox").textContent="—"; document.getElementById("downloadQrBtn").disabled=true; }
+document.getElementById("downloadQrBtn").addEventListener("click",()=>downloadCurrentPNG());
 document.querySelectorAll('input[name="qrtype"]').forEach(r=>r.addEventListener("change",()=>{ if(lastPayload){ renderQRorBarcode(lastPayload); }}));
 
-/* ================== Scanner bindings ================== */
+/* ================== Bindings ================== */
 document.getElementById("startBtn").addEventListener("click", startScan);
 document.getElementById("stopBtn").addEventListener("click", stopScan);
 document.getElementById("testCamBtn").addEventListener("click", testCameraBasic);
-document.getElementById("fileInput").addEventListener("change", async (e)=>{
-  const f=e.target.files?.[0]; if(!f) return;
-  try{
-    await waitForH5Q();
-    if (!window.Html5Qrcode) throw new Error("html5-qrcode tidak termuat");
-    const tmpDiv = document.createElement("div");
-    const tmp = new Html5Qrcode(tmpDiv); // offscreen
-    const decoded = await tmp.scanFile(f, true);
-    await tmp.clear();
-    document.getElementById("lastResult").textContent = decoded;
-    onScan(decoded);
-  }catch(err){ setScanStatus("Gagal decode gambar.", true); }
-  e.target.value="";
-});
-
-/* ================== Table/Search/Export ================== */
+document.getElementById("fileInput").addEventListener("change", e=>{ const f=e.target.files?.[0]; if(f) scanImageFile(f); e.target.value=""; });
 document.getElementById("searchInput").addEventListener("input", refreshTable);
-document.getElementById("exportCsvBtn").addEventListener("click", async ()=>{
-  const rows=await getAll(); download(`buku-tamu-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows));
-});
-document.getElementById("clearAllBtn").addEventListener("click", async ()=>{
-  if(!confirm("Yakin hapus semua data lokal?")) return;
-  await clearAll(); await refreshTable(); setStatus("Semua data dihapus.");
-});
-
-/* ================== Panitia form ================== */
+document.getElementById("exportCsvBtn").addEventListener("click", async ()=>{ const rows=await getAll(); download(`buku-tamu-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows)); });
+document.getElementById("clearAllBtn").addEventListener("click", async ()=>{ if(!confirm("Yakin hapus semua data lokal?"))return; await clearAll(); await refreshTable(); setStatus("Semua data dihapus."); });
 document.getElementById("guestForm").addEventListener("submit", async (e)=>{ e.preventDefault(); await handleSave(false); });
 document.getElementById("markPresentBtn").addEventListener("click", async ()=>{ await handleSave(true); });
 
 /* ================== INIT ================== */
-(async function init(){
-  db = await openDB();
-  await listCameras();
-  await refreshTable();
-
-  // disable tombol kamera bila non-secure
-  if (!IS_SECURE) {
-    ["startBtn","testCamBtn"].forEach(id => { const el=document.getElementById(id); if(el){ el.disabled=true; el.title='Buka via HTTPS/localhost'; }});
-  }
-})();
+(async function init(){ db=await openDB(); await listCameras(); await refreshTable(); })();
 </script>
 </body>
 </html>
