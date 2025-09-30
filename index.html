@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Buku Tamu – ID Only (Multi-Device, Auto Save, Duplikat + Kartu + Diagnostik)</title>
+<title>Buku Tamu – Pilih Undangan + PIN + Operator → Scan</title>
 
-<!-- Tailwind (styling) -->
+<!-- Tailwind -->
 <script src="https://cdn.tailwindcss.com"></script>
 
-<!-- Generator QR / Code128 (untuk membuat QR RSVP; scanner TIDAK bergantung ini) -->
+<!-- Generator QR / Code128 (untuk membuat QR RSVP; scanner TIDAK bergantung CDN ini) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 
@@ -22,206 +22,247 @@
 <div class="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
   <div id="toast" class="toast"></div>
 
-  <!-- ================= Header & Login ================= -->
+  <!-- Header -->
   <header class="space-y-1">
     <h1 class="text-2xl font-semibold">Buku Tamu Wedding – ID Only</h1>
-    <p class="text-slate-600 text-sm">QR hanya berisi <b>GID</b>. Multi-device (Supabase). Scan ➜ auto tersimpan & hadir. Duplikat ➜ notifikasi + bunyi + kartu hasil.</p>
+    <p class="text-slate-600 text-sm">Pilih <b>Undangan</b> ➜ masukkan <b>PIN</b> ➜ atur <b>Operator</b> ➜ <b>Scan</b>. Multi-device (Supabase), autosave, duplikat alert + kartu hasil.</p>
     <p id="secureWarn" class="hidden text-rose-600 text-sm">Harus HTTPS / http://localhost untuk akses kamera.</p>
   </header>
 
-  <section id="loginCard" class="bg-white ring-1 ring-slate-200 rounded-xl p-4">
-    <h2 class="font-semibold mb-2">Login Acara</h2>
-    <div class="grid md:grid-cols-4 gap-3 items-end">
-      <div>
-        <label class="text-xs text-slate-500">Event ID</label>
-        <input id="eventIdInput" class="w-full mt-1 rounded-lg border-slate-300 focus:ring-blue-500" placeholder="mis. AYAT33-001" />
+  <!-- ====== WIZARD: Pilih Undangan → PIN → Operator ====== -->
+  <section id="wizard" class="bg-white ring-1 ring-slate-200 rounded-xl p-4 space-y-4">
+    <h2 class="font-semibold">1) Pilih Undangan</h2>
+    <div class="grid md:grid-cols-3 gap-3">
+      <div class="md:col-span-1">
+        <label class="text-xs text-slate-500">Cari undangan</label>
+        <input id="eventSearch" class="w-full mt-1 rounded-lg border-slate-300 focus:ring-blue-500" placeholder="cth: Andin Dafa / Jawa" />
       </div>
-      <div>
+      <div class="md:col-span-2">
+        <label class="text-xs text-slate-500">Daftar undangan (dari tabel <code>events</code>)</label>
+        <select id="eventSelect" class="w-full mt-1 rounded-lg border-slate-300 focus:ring-blue-500"></select>
+      </div>
+    </div>
+
+    <h2 class="font-semibold">2) PIN Acara</h2>
+    <div class="grid md:grid-cols-3 gap-3 items-end">
+      <div class="md:col-span-2">
         <label class="text-xs text-slate-500">PIN</label>
-        <input id="pinInput" type="password" class="w-full mt-1 rounded-lg border-slate-300 focus:ring-blue-500" placeholder="pin acara" />
+        <input id="pinInput" type="password" class="w-full mt-1 rounded-lg border-slate-300 focus:ring-blue-500" placeholder="PIN undangan" />
       </div>
-      <div>
-        <label class="text-xs text-slate-500">Operator (opsional)</label>
-        <input id="operatorInput" class="w-full mt-1 rounded-lg border-slate-300 focus:ring-blue-500" placeholder="nama panitia" />
+      <div class="md:col-span-1">
+        <button id="verifyBtn" class="w-full py-2 rounded-lg bg-blue-600 text-white">Verifikasi PIN</button>
+      </div>
+    </div>
+    <div id="verifyStatus" class="text-sm text-slate-500"></div>
+
+    <div id="opBlock" class="hidden space-y-3">
+      <h2 class="font-semibold">3) Operator</h2>
+      <div class="grid md:grid-cols-4 gap-3 items-end">
+        <div>
+          <label class="text-xs text-slate-500">Jumlah operator</label>
+          <input id="opCount" type="number" min="1" max="10" value="1" class="w-full mt-1 rounded-lg border-slate-300 focus:ring-blue-500">
+        </div>
+        <div class="md:col-span-3">
+          <div id="opInputs" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2"></div>
+        </div>
       </div>
       <div class="flex gap-2">
-        <button id="loginBtn" class="flex-1 py-2 rounded-lg bg-blue-600 text-white">Masuk</button>
-        <button id="logoutBtn" class="py-2 px-4 rounded-lg bg-slate-700 text-white hidden">Keluar</button>
+        <button id="startAppBtn" class="flex-1 py-2 rounded-lg bg-emerald-600 text-white">Mulai Scan</button>
+        <button id="logoutBtn" class="py-2 px-4 rounded-lg bg-slate-700 text-white">Keluar</button>
       </div>
-    </div>
-    <div id="loginStatus" class="text-sm text-slate-500 mt-2"></div>
-  </section>
-
-  <!-- ================= Bar Kontrol Scanner ================= -->
-  <section class="bg-white ring-1 ring-slate-200 rounded-xl p-4">
-    <div class="grid md:grid-cols-3 gap-3">
-      <div>
-        <label class="text-xs text-slate-500">Pilih Kamera</label>
-        <select id="cameraSelect" class="w-full mt-1 rounded-lg border-slate-300 focus:ring-blue-500"></select>
-      </div>
-      <div>
-        <label class="text-xs text-slate-500">Scan dari Gambar</label>
-        <input id="fileInput" type="file" accept="image/*" class="w-full mt-1 rounded-lg border-slate-300 focus:ring-blue-500" />
-      </div>
-      <div class="flex gap-2 items-end">
-        <button id="startBtn" class="flex-1 py-2 rounded-lg bg-blue-600 text-white">Mulai Scan</button>
-        <button id="stopBtn" class="py-2 px-4 rounded-lg bg-slate-700 text-white">Stop</button>
-        <button id="testCamBtn" class="py-2 px-4 rounded-lg bg-amber-600 text-white">Test</button>
-      </div>
-    </div>
-
-    <div class="mt-3" id="reader"><span class="text-sm text-slate-500">Klik “Mulai Scan”</span></div>
-
-    <div class="mt-2 flex items-center justify-between text-sm">
-      <div>Hasil: <span id="lastResult" class="font-mono text-emerald-700">—</span></div>
-      <div id="scanStatus" class="text-slate-500"></div>
-    </div>
-
-    <!-- Kartu hasil scan -->
-    <div id="scanCard" class="mt-3 hidden">
-      <div id="scanCardInner" class="rounded-xl ring-1 ring-slate-200 bg-white p-3 flex items-center gap-3">
-        <div id="scanBadge" class="shrink-0 w-10 h-10 rounded-full grid place-items-center text-xl">✓</div>
-        <div class="flex-1">
-          <div class="text-lg font-semibold leading-tight" id="scanNama">—</div>
-          <div class="text-sm text-slate-600">
-            GID: <span id="scanGid" class="font-mono">—</span>
-            · Nomor: <span id="scanNomor" class="font-mono">—</span>
-          </div>
-          <div class="text-xs text-slate-500 mt-0.5">
-            Status: <span id="scanStatusText">—</span> · Waktu: <span id="scanTime">—</span>
-          </div>
-        </div>
-      </div>
+      <div class="text-xs text-slate-500">Operator disimpan di perangkat ini per event. (Opsional: bisa dibuat tabel <code>operators</code> agar lintas device.)</div>
     </div>
   </section>
 
-  <!-- ================= RSVP (Generate QR – ID Only) ================= -->
-  <section class="grid md:grid-cols-2 gap-4">
-    <div class="bg-white ring-1 ring-slate-200 rounded-xl p-4 space-y-3">
-      <h2 class="font-semibold">RSVP (Generate QR – ID saja)</h2>
-      <form id="rsvpForm" class="space-y-3">
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-sm text-slate-600">Nama</label>
-            <input id="rsvpNama" class="mt-1 w-full rounded-lg border-slate-300 focus:ring-blue-500" placeholder="Nama tamu" required>
-          </div>
-          <div>
-            <label class="text-sm text-slate-600">Nomor (opsional)</label>
-            <input id="rsvpNomor" type="number" min="1" class="mt-1 w-full rounded-lg border-slate-300 focus:ring-blue-500" placeholder="auto jika kosong">
+  <!-- ====== MAIN APP (muncul setelah wizard selesai) ====== -->
+  <div id="appMain" class="hidden space-y-6">
+
+    <!-- Bar operator aktif -->
+    <section class="bg-white ring-1 ring-slate-200 rounded-xl p-4">
+      <div class="grid md:grid-cols-3 gap-3 items-end">
+        <div>
+          <label class="text-xs text-slate-500">Undangan</label>
+          <div id="eventBadge" class="mt-1 text-sm font-medium">—</div>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Operator Aktif</label>
+          <select id="activeOpSelect" class="w-full mt-1 rounded-lg border-slate-300 focus:ring-blue-500"></select>
+        </div>
+        <div class="text-xs text-slate-500">Tip: jika ganti operator, pilih dari dropdown ini.</div>
+      </div>
+    </section>
+
+    <!-- Scanner -->
+    <section class="bg-white ring-1 ring-slate-200 rounded-xl p-4">
+      <div class="grid md:grid-cols-3 gap-3">
+        <div>
+          <label class="text-xs text-slate-500">Pilih Kamera</label>
+          <select id="cameraSelect" class="w-full mt-1 rounded-lg border-slate-300 focus:ring-blue-500"></select>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">Scan dari Gambar</label>
+          <input id="fileInput" type="file" accept="image/*" class="w-full mt-1 rounded-lg border-slate-300 focus:ring-blue-500" />
+        </div>
+        <div class="flex gap-2 items-end">
+          <button id="startBtn" class="flex-1 py-2 rounded-lg bg-blue-600 text-white">Mulai Scan</button>
+          <button id="stopBtn" class="py-2 px-4 rounded-lg bg-slate-700 text-white">Stop</button>
+          <button id="testCamBtn" class="py-2 px-4 rounded-lg bg-amber-600 text-white">Test</button>
+        </div>
+      </div>
+
+      <div class="mt-3" id="reader"><span class="text-sm text-slate-500">Klik “Mulai Scan”</span></div>
+
+      <div class="mt-2 flex items-center justify-between text-sm">
+        <div>Hasil: <span id="lastResult" class="font-mono text-emerald-700">—</span></div>
+        <div id="scanStatus" class="text-slate-500"></div>
+      </div>
+
+      <!-- Kartu hasil -->
+      <div id="scanCard" class="mt-3 hidden">
+        <div id="scanCardInner" class="rounded-xl ring-1 ring-slate-200 bg-white p-3 flex items-center gap-3">
+          <div id="scanBadge" class="shrink-0 w-10 h-10 rounded-full grid place-items-center text-xl">✓</div>
+          <div class="flex-1">
+            <div class="text-lg font-semibold leading-tight" id="scanNama">—</div>
+            <div class="text-sm text-slate-600">
+              GID: <span id="scanGid" class="font-mono">—</span>
+              · Nomor: <span id="scanNomor" class="font-mono">—</span>
+              · Operator: <span id="scanOp" class="font-mono">—</span>
+            </div>
+            <div class="text-xs text-slate-500 mt-0.5">
+              Status: <span id="scanStatusText">—</span> · Waktu: <span id="scanTime">—</span>
+            </div>
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-sm text-slate-600">Guest ID (opsional)</label>
-            <input id="rsvpGid" class="mt-1 w-full rounded-lg border-slate-300 focus:ring-blue-500" placeholder="isi manual jika ingin">
+      </div>
+    </section>
+
+    <!-- RSVP + Suara + Manual -->
+    <section class="grid md:grid-cols-2 gap-4">
+      <div class="bg-white ring-1 ring-slate-200 rounded-xl p-4 space-y-3">
+        <h2 class="font-semibold">RSVP (Generate QR – ID saja)</h2>
+        <form id="rsvpForm" class="space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-sm text-slate-600">Nama</label>
+              <input id="rsvpNama" class="mt-1 w-full rounded-lg border-slate-300 focus:ring-blue-500" placeholder="Nama tamu" required>
+            </div>
+            <div>
+              <label class="text-sm text-slate-600">Nomor (opsional)</label>
+              <input id="rsvpNomor" type="number" min="1" class="mt-1 w-full rounded-lg border-slate-300 focus:ring-blue-500" placeholder="auto jika kosong">
+            </div>
           </div>
-          <label class="mt-6 inline-flex items-center gap-2 text-sm">
-            <input id="autoNomor" type="checkbox" class="size-4" checked> Auto nomor
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-sm text-slate-600">Guest ID (opsional)</label>
+              <input id="rsvpGid" class="mt-1 w-full rounded-lg border-slate-300 focus:ring-blue-500" placeholder="isi manual jika ingin">
+            </div>
+            <label class="mt-6 inline-flex items-center gap-2 text-sm">
+              <input id="autoNomor" type="checkbox" class="size-4" checked> Auto nomor
+            </label>
+          </div>
+          <div class="flex gap-2">
+            <button class="flex-1 py-2 rounded-lg bg-blue-600 text-white" type="submit">Buat QR</button>
+            <button id="downloadQrBtn" class="flex-1 py-2 rounded-lg bg-emerald-600 text-white disabled:opacity-50" disabled>Download PNG</button>
+          </div>
+          <div id="rsvpStatus" class="text-sm text-slate-500"></div>
+        </form>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="ring-1 ring-slate-200 rounded-lg p-2">
+            <div class="flex gap-3 mb-2 text-sm">
+              <label class="inline-flex items-center gap-1"><input type="radio" name="qrtype" value="qr" checked>QR</label>
+              <label class="inline-flex items-center gap-1"><input type="radio" name="qrtype" value="code128">Code128</label>
+            </div>
+            <div id="qrContainer" class="min-h-[220px] flex items-center justify-center"></div>
+          </div>
+          <div class="ring-1 ring-slate-200 rounded-lg p-2 text-xs">
+            <div>Event: <span id="eventBox" class="font-mono">—</span></div>
+            <div>GID: <span id="gidBox" class="font-mono">—</span></div>
+            <div>Nama: <span id="nameBox" class="font-mono">—</span></div>
+            <div>Nomor: <span id="numBox" class="font-mono">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div class="bg-white ring-1 ring-slate-200 rounded-xl p-4 space-y-3">
+          <h2 class="font-semibold">Suara & Notifikasi</h2>
+          <div class="grid md:grid-cols-2 gap-3">
+            <div>
+              <label class="text-sm">Suara Sukses</label>
+              <input id="soundOk" type="file" accept="audio/*" class="mt-1 w-full text-sm">
+            </div>
+            <div>
+              <label class="text-sm">Suara Duplikat</label>
+              <input id="soundDup" type="file" accept="audio/*" class="mt-1 w-full text-sm">
+            </div>
+          </div>
+          <label class="text-sm flex items-center gap-2">Volume
+            <input id="vol" type="range" min="0" max="1" step="0.05" value="0.6" class="flex-1">
           </label>
         </div>
+
+        <div class="bg-white ring-1 ring-slate-200 rounded-xl p-4 space-y-3">
+          <h2 class="font-semibold">Input Manual</h2>
+          <form id="guestForm" class="grid md:grid-cols-4 gap-2">
+            <input id="barcodeValue" class="rounded-lg border-slate-300 focus:ring-blue-500" placeholder="GID (token)">
+            <input id="nama" class="rounded-lg border-slate-300 focus:ring-blue-500" placeholder="Nama">
+            <input id="nomorTamu" type="number" min="1" class="rounded-lg border-slate-300 focus:ring-blue-500" placeholder="Nomor">
+            <div class="flex gap-2">
+              <button class="flex-1 py-2 rounded-lg bg-emerald-600 text-white" type="submit">Simpan</button>
+              <button id="markPresentBtn" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white" type="button">Simpan + Hadir</button>
+            </div>
+          </form>
+          <div id="statusMsg" class="text-sm text-slate-500"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Diagnostik -->
+    <section class="bg-white ring-1 ring-slate-200 rounded-xl p-3 md:p-4">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div id="diagText" class="text-sm">Remote: — | Event: — | Last sync: —</div>
         <div class="flex gap-2">
-          <button class="flex-1 py-2 rounded-lg bg-blue-600 text-white" type="submit">Buat QR</button>
-          <button id="downloadQrBtn" class="flex-1 py-2 rounded-lg bg-emerald-600 text-white disabled:opacity-50" disabled>Download PNG</button>
-        </div>
-        <div id="rsvpStatus" class="text-sm text-slate-500"></div>
-      </form>
-
-      <div class="grid grid-cols-2 gap-3">
-        <div class="ring-1 ring-slate-200 rounded-lg p-2">
-          <div class="flex gap-3 mb-2 text-sm">
-            <label class="inline-flex items-center gap-1"><input type="radio" name="qrtype" value="qr" checked>QR</label>
-            <label class="inline-flex items-center gap-1"><input type="radio" name="qrtype" value="code128">Code128</label>
-          </div>
-          <div id="qrContainer" class="min-h-[220px] flex items-center justify-center"></div>
-        </div>
-        <div class="ring-1 ring-slate-200 rounded-lg p-2 text-xs">
-          <div>Event: <span id="eventBox" class="font-mono">—</span></div>
-          <div>GID: <span id="gidBox" class="font-mono">—</span></div>
-          <div>Nama: <span id="nameBox" class="font-mono">—</span></div>
-          <div>Nomor: <span id="numBox" class="font-mono">—</span></div>
+          <button id="syncNowBtn" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white">Sync Sekarang</button>
+          <button id="testRemoteBtn" class="px-3 py-1.5 rounded-lg bg-slate-700 text-white">Uji Koneksi</button>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- ================= Suara & Input Manual ================= -->
-    <div class="space-y-4">
-      <div class="bg-white ring-1 ring-slate-200 rounded-xl p-4 space-y-3">
-        <h2 class="font-semibold">Suara & Notifikasi</h2>
-        <div class="grid md:grid-cols-2 gap-3">
-          <div>
-            <label class="text-sm">Suara Sukses</label>
-            <input id="soundOk" type="file" accept="audio/*" class="mt-1 w-full text-sm">
-          </div>
-          <div>
-            <label class="text-sm">Suara Duplikat</label>
-            <input id="soundDup" type="file" accept="audio/*" class="mt-1 w-full text-sm">
-          </div>
+    <!-- Tabel -->
+    <section class="bg-white ring-1 ring-slate-200 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="font-semibold">Riwayat (tersinkron)</h2>
+        <div class="flex gap-2">
+          <input id="searchInput" placeholder="Cari…" class="rounded-lg border-slate-300 focus:ring-blue-500">
+          <button id="exportCsvBtn" class="px-3 rounded-lg bg-sky-600 text-white">Export CSV</button>
+          <button id="clearAllBtn" class="px-3 rounded-lg bg-rose-600 text-white">Hapus Lokal</button>
         </div>
-        <label class="text-sm flex items-center gap-2">Volume
-          <input id="vol" type="range" min="0" max="1" step="0.05" value="0.6" class="flex-1">
-        </label>
       </div>
-
-      <div class="bg-white ring-1 ring-slate-200 rounded-xl p-4 space-y-3">
-        <h2 class="font-semibold">Input Manual</h2>
-        <form id="guestForm" class="grid md:grid-cols-4 gap-2">
-          <input id="barcodeValue" class="rounded-lg border-slate-300 focus:ring-blue-500" placeholder="GID (token)">
-          <input id="nama" class="rounded-lg border-slate-300 focus:ring-blue-500" placeholder="Nama">
-          <input id="nomorTamu" type="number" min="1" class="rounded-lg border-slate-300 focus:ring-blue-500" placeholder="Nomor">
-          <div class="flex gap-2">
-            <button class="flex-1 py-2 rounded-lg bg-emerald-600 text-white" type="submit">Simpan</button>
-            <button id="markPresentBtn" class="flex-1 py-2 rounded-lg bg-indigo-600 text-white" type="button">Simpan + Hadir</button>
-          </div>
-        </form>
-        <div id="statusMsg" class="text-sm text-slate-500"></div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-slate-50">
+            <tr><th class="px-2 py-1">Waktu</th><th class="px-2 py-1">GID</th><th class="px-2 py-1">Nomor</th><th class="px-2 py-1">Nama</th><th class="px-2 py-1">Status</th><th class="px-2 py-1">Aksi</th></tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
       </div>
-    </div>
-  </section>
-
-  <!-- ================= Panel Diagnostik ================= -->
-  <section class="bg-white ring-1 ring-slate-200 rounded-xl p-3 md:p-4">
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-      <div id="diagText" class="text-sm">Remote: — | Event: — | Last sync: —</div>
-      <div class="flex gap-2">
-        <button id="syncNowBtn" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white">Sync Sekarang</button>
-        <button id="testRemoteBtn" class="px-3 py-1.5 rounded-lg bg-slate-700 text-white">Uji Koneksi</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ================= Tabel ================= -->
-  <section class="bg-white ring-1 ring-slate-200 rounded-xl p-4">
-    <div class="flex items-center justify-between mb-2">
-      <h2 class="font-semibold">Riwayat (tersinkron)</h2>
-      <div class="flex gap-2">
-        <input id="searchInput" placeholder="Cari…" class="rounded-lg border-slate-300 focus:ring-blue-500">
-        <button id="exportCsvBtn" class="px-3 rounded-lg bg-sky-600 text-white">Export CSV</button>
-        <button id="clearAllBtn" class="px-3 rounded-lg bg-rose-600 text-white">Hapus Lokal</button>
-      </div>
-    </div>
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-slate-50">
-          <tr><th class="px-2 py-1">Waktu</th><th class="px-2 py-1">GID</th><th class="px-2 py-1">Nomor</th><th class="px-2 py-1">Nama</th><th class="px-2 py-1">Status</th><th class="px-2 py-1">Aksi</th></tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-      </table>
-    </div>
-    <div class="text-xs text-slate-500 mt-2" id="syncStatus">—</div>
-  </section>
+      <div class="text-xs text-slate-500 mt-2" id="syncStatus">—</div>
+    </section>
+  </div>
 </div>
 
 <script>
-/* ================== SUPABASE CONFIG ================== */
-const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co"; // ← ganti
-const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";               // ← ganti
+/* ===== Supabase Config ===== */
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co"; // ganti
+const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";               // ganti
 const REMOTE_ENABLED = SUPABASE_URL.startsWith("https://") && !SUPABASE_ANON_KEY.includes("YOUR-");
 const RH = REMOTE_ENABLED ? {
   "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer "+SUPABASE_ANON_KEY,
   "Content-Type": "application/json", "Prefer":"return=representation"
 } : {};
 
-/* ================== Helpers & UI ================== */
+/* ===== Helpers & UI ===== */
 const IS_SECURE = location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
 if (!IS_SECURE) document.getElementById("secureWarn").classList.remove("hidden");
 const two=n=>String(n).padStart(2,"0");
@@ -230,92 +271,18 @@ function gid(len=8){return Array.from(crypto.getRandomValues(new Uint8Array(len)
 const toastBox=document.getElementById("toast");
 function toast(msg,type="info"){ const el=document.createElement("div"); el.className=`mb-2 px-3 py-2 rounded-lg shadow text-sm ${type==="ok"?"bg-emerald-600 text-white":type==="warn"?"bg-amber-600 text-white":type==="err"?"bg-rose-600 text-white":"bg-slate-800 text-white"}`; el.textContent=msg; toastBox.appendChild(el); setTimeout(()=>el.remove(),3500); }
 
-/* ====== Kartu Hasil ====== */
-function showScanCard({gid, nama, nomor, status}) {
-  const wrap = document.getElementById("scanCard");
-  const badge = document.getElementById("scanBadge");
-  const namaEl = document.getElementById("scanNama");
-  const gidEl  = document.getElementById("scanGid");
-  const noEl   = document.getElementById("scanNomor");
-  const stEl   = document.getElementById("scanStatusText");
-  const tmEl   = document.getElementById("scanTime");
+function el(id){return document.getElementById(id);}
 
-  namaEl.textContent = nama || "—";
-  gidEl.textContent  = gid || "—";
-  noEl.textContent   = nomor || "—";
-  stEl.textContent   = status;
-  tmEl.textContent   = isoToLocal(new Date().toISOString());
-
-  if (status === "DUPLIKAT") {
-    badge.textContent = "⚠️";
-    badge.className = "shrink-0 w-10 h-10 rounded-full grid place-items-center text-xl bg-amber-100 text-amber-700 ring-1 ring-amber-200";
-    document.getElementById("scanCardInner").className =
-      "rounded-xl ring-1 ring-amber-200 bg-amber-50 p-3 flex items-center gap-3";
-  } else {
-    badge.textContent = "✓";
-    badge.className = "shrink-0 w-10 h-10 rounded-full grid place-items-center text-xl bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200";
-    document.getElementById("scanCardInner").className =
-      "rounded-xl ring-1 ring-emerald-200 bg-emerald-50 p-3 flex items-center gap-3";
-  }
-  wrap.classList.remove("hidden");
-}
-
-/* ================== Login Acara ================== */
+/* ===== State ===== */
 let EVENT_ID = localStorage.getItem("event_id") || "";
 let EVENT_PIN = localStorage.getItem("event_pin") || "";
-let OPERATOR = localStorage.getItem("operator") || "";
-const loginStatus = document.getElementById("loginStatus");
-function setLoginUI(){
-  document.getElementById("eventIdInput").value = EVENT_ID;
-  document.getElementById("pinInput").value = EVENT_PIN;
-  document.getElementById("operatorInput").value = OPERATOR;
-  document.getElementById("eventBox").textContent = EVENT_ID || "—";
-  document.getElementById("logoutBtn").classList.toggle("hidden", !EVENT_ID);
-  updateDiag(true);
-}
-async function verifyEvent(id, pin){
-  if(!REMOTE_ENABLED) return true;
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/events?id=eq.${encodeURIComponent(id)}&pin=eq.${encodeURIComponent(pin)}&select=id`, {headers: RH});
-  const j = r.ok ? await r.json() : [];
-  return j.length>0;
-}
-document.getElementById("loginBtn").addEventListener("click", async ()=>{
-  const id = document.getElementById("eventIdInput").value.trim();
-  const pin = document.getElementById("pinInput").value.trim();
-  const op  = document.getElementById("operatorInput").value.trim();
-  if(!id || !pin){ loginStatus.textContent="Isi Event ID & PIN."; return; }
-  const ok = await verifyEvent(id, pin);
-  if(!ok){ loginStatus.textContent="Event/PIN salah."; toast("Event/PIN salah","err"); return; }
-  EVENT_ID=id; EVENT_PIN=pin; OPERATOR=op;
-  localStorage.setItem("event_id",EVENT_ID);
-  localStorage.setItem("event_pin",EVENT_PIN);
-  localStorage.setItem("operator",OPERATOR);
-  loginStatus.textContent=`Login acara: ${EVENT_ID}`;
-  toast("Login berhasil","ok");
-  setLoginUI();
-  startFastPoll(45);           // fast polling setelah login
-  syncFromRemote();
-});
-document.getElementById("logoutBtn").addEventListener("click", ()=>{
-  EVENT_ID=""; EVENT_PIN=""; OPERATOR="";
-  localStorage.removeItem("event_id"); localStorage.removeItem("event_pin"); localStorage.removeItem("operator");
-  setLoginUI(); document.getElementById("syncStatus").textContent="Belum login acara.";
-});
-setLoginUI();
+let OPERATORS = [];                  // array nama operator (per event)
+let ACTIVE_OPERATOR = "";            // operator aktif
+let eventsCache = [];                // daftar undangan (id,name,theme)
+const appMain = el("appMain");
+const wizard = el("wizard");
 
-/* ================== Suara (kustom) ================== */
-let soundOK = new Audio(); let soundDup = new Audio(); let volume = 0.6;
-function loadSounds(){ const ok=localStorage.getItem("sound_ok_url"); const du=localStorage.getItem("sound_dup_url"); if(ok) soundOK.src=ok; if(du) soundDup.src=du; soundOK.volume=soundDup.volume=volume; }
-document.getElementById("vol").addEventListener("input", e=>{ volume=Number(e.target.value); soundOK.volume=soundDup.volume=volume; });
-["soundOk","soundDup"].forEach((id,idx)=>{
-  document.getElementById(id).addEventListener("change", (ev)=>{
-    const f=ev.target.files?.[0]; if(!f) return; const url=URL.createObjectURL(f);
-    localStorage.setItem(idx? "sound_dup_url":"sound_ok_url", url); loadSounds(); toast("Suara diperbarui","ok");
-  });
-});
-loadSounds();
-
-/* ================== IndexedDB (lokal cache per event) ================== */
+/* ===== IndexedDB (lokal cache per event) ===== */
 const DB="bukuTamu_idonly", STORE="tamu"; let db=null;
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>{const s=r.result.createObjectStore(STORE,{keyPath:"id",autoIncrement:true});s.createIndex("event_gid","event_gid",{unique:true});s.createIndex("event","event");};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 const tx=(m)=>db.transaction(STORE,m).objectStore(STORE);
@@ -325,152 +292,125 @@ const allLocal=()=>new Promise((res,rej)=>{const q=tx("readonly").getAll();q.ons
 const byEvent=async()=> (await allLocal()).filter(r=>r.event===EVENT_ID);
 const findLocal=(gid)=>new Promise((res,rej)=>{const q=tx("readonly").index("event_gid").get(`${EVENT_ID}|${gid}`);q.onsuccess=()=>res(q.result||null);q.onerror=()=>rej(q.error);});
 const delLocal=(id)=>new Promise((res,rej)=>{const q=tx("readwrite").delete(id);q.onsuccess=()=>res(true);q.onerror=()=>rej(q.error);});
-const clearLocal=()=>new Promise((res,rej)=>{const q=tx("readwrite").clear();q.onsuccess=()=>res(true);q.onerror=()=>rej(q.error);});
 
-/* ================== Diagnostik ================== */
-let LAST_SYNC_AT = null;
-function updateDiag(ok=true, msg="") {
-  const t = document.getElementById('diagText');
-  const ls = LAST_SYNC_AT ? new Date(LAST_SYNC_AT).toLocaleTimeString() : "—";
-  const remote = REMOTE_ENABLED ? 'ON' : 'OFF';
-  const eventId = EVENT_ID || '—';
-  t.textContent = `Remote: ${remote} | Event: ${eventId} | Last sync: ${ls}${msg? ' | '+msg : ''}`;
-}
-async function testRemote() {
-  if (!REMOTE_ENABLED) {
-    toast('REMOTE OFF: Supabase URL/Anon Key belum diset.', 'err');
-    updateDiag(false, 'REMOTE OFF');
+/* ===== Remote REST ===== */
+async function fetchEventsList(){
+  const sel = el("eventSelect"); sel.innerHTML = "";
+  if(!REMOTE_ENABLED){
+    sel.innerHTML = `<option value="">(REMOTE OFF) Isi manual tabel events di Supabase untuk memuat daftar undangan</option>`;
     return;
   }
-  try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/guests?select=count`, { headers: RH });
-    if (!r.ok) throw new Error(`HTTP ${r.status} pada /guests (cek tabel/policy).`);
-    toast('Koneksi Supabase OK.', 'ok');
-    updateDiag(true, 'OK');
-  } catch (e) {
-    toast('Gagal konek: ' + e.message, 'err');
-    updateDiag(false, 'Err: ' + e.message);
+  try{
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/events?select=id,name,theme&order=name.asc`, {headers: RH});
+    if(!r.ok) throw new Error(`HTTP ${r.status} saat baca events`);
+    const j = await r.json();
+    eventsCache = j;
+    populateEventOptions();
+  }catch(e){
+    sel.innerHTML = `<option value="">Gagal memuat daftar undangan: ${e.message}</option>`;
   }
 }
-document.getElementById('syncNowBtn').addEventListener('click', syncFromRemote);
-document.getElementById('testRemoteBtn').addEventListener('click', testRemote);
-document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') syncFromRemote(); });
-
-/* ================== Supabase REST (ID-only) + error detail ================== */
-async function remoteGetAll(){
-  if(!REMOTE_ENABLED||!EVENT_ID) return [];
-  const url = `${SUPABASE_URL}/rest/v1/guests?event_id=eq.${encodeURIComponent(EVENT_ID)}&select=*&order=waktu.desc`;
-  const r = await fetch(url,{headers:RH});
-  if(!r.ok) throw new Error(`GET /guests gagal (HTTP ${r.status}). Pastikan tabel 'guests' & policy SELECT aktif.`);
-  return r.json();
-}
-async function remoteGetByGid(gid){
-  if(!REMOTE_ENABLED||!EVENT_ID) return null;
-  const url = `${SUPABASE_URL}/rest/v1/guests?event_id=eq.${encodeURIComponent(EVENT_ID)}&guest_id=eq.${encodeURIComponent(gid)}&select=*`;
-  const r = await fetch(url,{headers:RH});
-  if(!r.ok) throw new Error(`GET /guests (by gid) gagal (HTTP ${r.status}).`);
-  const j = await r.json();
-  return j[0]||null;
-}
-async function remoteInsert(row){
-  if(!REMOTE_ENABLED||!EVENT_ID) return null;
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/guests`,{method:"POST",headers:RH,body:JSON.stringify(row)});
-  if(!r.ok) throw new Error(`INSERT /guests gagal (HTTP ${r.status}). Cek policy INSERT.`);
-  const j = await r.json(); return j[0];
-}
-async function remoteUpdate(gid,patch){
-  if(!REMOTE_ENABLED||!EVENT_ID) return null;
-  const url = `${SUPABASE_URL}/rest/v1/guests?event_id=eq.${encodeURIComponent(EVENT_ID)}&guest_id=eq.${encodeURIComponent(gid)}`;
-  const r = await fetch(url,{method:"PATCH",headers:RH,body:JSON.stringify(patch)});
-  if(!r.ok) throw new Error(`UPDATE /guests gagal (HTTP ${r.status}). Cek policy UPDATE.`);
-  const j = await r.json(); return j[0];
+function populateEventOptions(){
+  const q = (el("eventSearch").value||"").toLowerCase();
+  const sel = el("eventSelect"); sel.innerHTML = "";
+  const arr = eventsCache.filter(ev=>{
+    const s = `${ev.name||""} ${ev.theme||""} ${ev.id||""}`.toLowerCase();
+    return !q || s.includes(q);
+  });
+  if(!arr.length){ sel.innerHTML = `<option value="">Tidak ada yang cocok</option>`; return; }
+  for(const ev of arr){
+    const opt = document.createElement("option");
+    opt.value = ev.id;
+    opt.textContent = `${ev.name||ev.id}${ev.theme? " • "+ev.theme:""} (${ev.id})`;
+    sel.appendChild(opt);
+  }
+  // pilih default
+  if(EVENT_ID){
+    sel.value = EVENT_ID;
+  }
 }
 
-/* ================== Tabel & Sync ================== */
+/* Events remote for guests */
+async function remoteGetAll(){ if(!REMOTE_ENABLED||!EVENT_ID) return []; const r=await fetch(`${SUPABASE_URL}/rest/v1/guests?event_id=eq.${encodeURIComponent(EVENT_ID)}&select=*&order=waktu.desc`,{headers:RH}); if(!r.ok) throw new Error(`GET /guests ${r.status}`); return r.json(); }
+async function remoteGetByGid(gid){ if(!REMOTE_ENABLED||!EVENT_ID) return null; const r=await fetch(`${SUPABASE_URL}/rest/v1/guests?event_id=eq.${encodeURIComponent(EVENT_ID)}&guest_id=eq.${encodeURIComponent(gid)}&select=*`,{headers:RH}); if(!r.ok) throw new Error(`GET /guests by gid ${r.status}`); const j=await r.json(); return j[0]||null; }
+async function remoteInsert(row){ if(!REMOTE_ENABLED||!EVENT_ID) return null; const r=await fetch(`${SUPABASE_URL}/rest/v1/guests`,{method:"POST",headers:RH,body:JSON.stringify(row)}); if(!r.ok) throw new Error(`INSERT /guests ${r.status}`); return (await r.json())[0]; }
+async function remoteUpdate(gid,patch){ if(!REMOTE_ENABLED||!EVENT_ID) return null; const r=await fetch(`${SUPABASE_URL}/rest/v1/guests?event_id=eq.${encodeURIComponent(EVENT_ID)}&guest_id=eq.${encodeURIComponent(gid)}`,{method:"PATCH",headers:RH,body:JSON.stringify(patch)}); if(!r.ok) throw new Error(`UPDATE /guests ${r.status}`); return (await r.json())[0]; }
+
+/* ===== Diagnostik ===== */
+let LAST_SYNC_AT = null;
+function updateDiag(msg="") {
+  const ls = LAST_SYNC_AT ? new Date(LAST_SYNC_AT).toLocaleTimeString() : "—";
+  el("diagText").textContent = `Remote: ${REMOTE_ENABLED?'ON':'OFF'} | Event: ${EVENT_ID||'—'} | Last sync: ${ls}${msg? ' | '+msg:''}`;
+}
+async function testRemote() {
+  if (!REMOTE_ENABLED) { toast('REMOTE OFF: Supabase URL/Anon Key belum diset.', 'err'); updateDiag('REMOTE OFF'); return; }
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/guests?select=count`, { headers: RH });
+    if (!r.ok) throw new Error(`HTTP ${r.status} pada /guests`);
+    toast('Koneksi Supabase OK.', 'ok'); updateDiag('OK');
+  } catch (e) { toast('Gagal konek: ' + e.message, 'err'); updateDiag('Err: '+e.message); }
+}
+el('syncNowBtn')?.addEventListener('click', syncFromRemote);
+el('testRemoteBtn')?.addEventListener('click', testRemote);
+
+/* ===== Tabel & Sync ===== */
 function renderTable(rows){
-  const q=(document.getElementById("searchInput").value||"").toLowerCase();
-  const tb=document.getElementById("tableBody"); tb.innerHTML="";
+  const q=(el("searchInput").value||"").toLowerCase();
+  const tb=el("tableBody"); tb.innerHTML="";
   rows.filter(r=>!q || (r.nama||"").toLowerCase().includes(q) || (r.gid||"").toLowerCase().includes(q) || String(r.nomor||"").includes(q))
-      .forEach(r=>{
-        const tr=document.createElement("tr"); tr.className="border-t";
-        tr.innerHTML=`<td class="px-2 py-1 whitespace-nowrap">${isoToLocal(r.waktu)}</td>
-                      <td class="px-2 py-1 font-mono text-xs break-all">${r.gid}</td>
-                      <td class="px-2 py-1">${r.nomor??"—"}</td>
-                      <td class="px-2 py-1">${r.nama||"—"}</td>
-                      <td class="px-2 py-1">${r.hadir?'<span class="text-emerald-700">Hadir</span>':'Draft'}</td>
-                      <td class="px-2 py-1"><button data-id="${r.id}" class="delBtn text-rose-600 underline text-xs">Hapus</button>${r.hadir?'':` <button data-id="${r.id}" class="markBtn text-indigo-600 underline text-xs">Tandai Hadir</button>`}</td>`;
-        tb.appendChild(tr);
-      });
+     .forEach(r=>{
+      const tr=document.createElement("tr"); tr.className="border-t";
+      tr.innerHTML=`<td class="px-2 py-1 whitespace-nowrap">${isoToLocal(r.waktu)}</td>
+                    <td class="px-2 py-1 font-mono text-xs break-all">${r.gid}</td>
+                    <td class="px-2 py-1">${r.nomor??"—"}</td>
+                    <td class="px-2 py-1">${r.nama||"—"}</td>
+                    <td class="px-2 py-1">${r.hadir?'<span class="text-emerald-700">Hadir</span>':'Draft'}</td>
+                    <td class="px-2 py-1"><button data-id="${r.id}" class="delBtn text-rose-600 underline text-xs">Hapus</button>${r.hadir?'':` <button data-id="${r.id}" class="markBtn text-indigo-600 underline text-xs">Tandai Hadir</button>`}</td>`;
+      tb.appendChild(tr);
+     });
   tb.querySelectorAll(".delBtn").forEach(b=>b.addEventListener("click",async e=>{await delLocal(Number(e.target.dataset.id)); refreshLocalTable();}));
   tb.querySelectorAll(".markBtn").forEach(b=>b.addEventListener("click",async e=>{
-    const id=Number(e.target.dataset.id); byEvent().then(async arr=>{
-      const row=arr.find(x=>x.id===id); if(!row) return;
-      row.hadir=true; row.waktuHadir=new Date().toISOString(); await putLocal(row);
-      if(REMOTE_ENABLED) await remoteUpdate(row.gid,{hadir:true,waktuHadir:row.waktuHadir,nama:row.nama,nomor:row.nomor});
-      refreshLocalTable();
-    });
+    const id=Number(e.target.dataset.id); const rows=[...(await byEvent())]; const row=rows.find(x=>x.id===id); if(!row) return;
+    row.hadir=true; row.waktuHadir=new Date().toISOString(); await putLocal(row);
+    if(REMOTE_ENABLED) await remoteUpdate(row.gid,{hadir:true,waktuHadir:row.waktuHadir,nama:row.nama,nomor:row.nomor});
+    refreshLocalTable();
   }));
 }
 async function refreshLocalTable(){ renderTable(await byEvent()); }
-
 async function syncFromRemote(){
-  if(!EVENT_ID){ document.getElementById("syncStatus").textContent="Belum login acara."; updateDiag(false,'No event'); return; }
-  if(!REMOTE_ENABLED){ document.getElementById("syncStatus").textContent="Mode lokal (tanpa server)."; updateDiag(false,'Local mode'); await refreshLocalTable(); return; }
-
-  document.getElementById("syncStatus").textContent="Sinkronisasi…";
+  if(!EVENT_ID){ el("syncStatus").textContent="Belum login acara."; updateDiag('No event'); return; }
+  if(!REMOTE_ENABLED){ el("syncStatus").textContent="Mode lokal (tanpa server)."; updateDiag('Local mode'); await refreshLocalTable(); return; }
+  el("syncStatus").textContent="Sinkronisasi…";
   try{
     const remoteRows = await remoteGetAll();
-    // replace lokal utk event ini
     const all = await allLocal();
     for(const r of all.filter(x=>x.event===EVENT_ID)){ await delLocal(r.id); }
     for(const r of remoteRows){
-      await addLocal({
-        id: undefined,
-        event: EVENT_ID, event_gid: `${EVENT_ID}|${r.guest_id}`,
-        waktu: r.waktu || new Date().toISOString(),
-        gid: r.guest_id, nama: r.nama, nomor: r.nomor,
-        hadir: !!r.hadir, waktuHadir: r.waktuHadir || null
-      });
+      await addLocal({ id: undefined, event: EVENT_ID, event_gid: `${EVENT_ID}|${r.guest_id}`, waktu: r.waktu || new Date().toISOString(), gid: r.guest_id, nama: r.nama, nomor: r.nomor, hadir: !!r.hadir, waktuHadir: r.waktuHadir || null, op: r.op || null });
     }
     await refreshLocalTable();
-    LAST_SYNC_AT = Date.now();
-    document.getElementById("syncStatus").textContent = `Tersinkron (${remoteRows.length} entri).`;
-    updateDiag(true);
+    LAST_SYNC_AT = Date.now(); el("syncStatus").textContent=`Tersinkron (${remoteRows.length} entri).`; updateDiag();
   }catch(e){
-    document.getElementById("syncStatus").textContent = "Gagal sinkron: " + e.message;
-    updateDiag(false, 'Err: ' + e.message);
+    el("syncStatus").textContent = "Gagal sinkron: " + e.message; updateDiag('Err: '+e.message);
   }
 }
 
-/* ================== Fast Polling ================== */
-let fastPollUntil = 0;
-function startFastPoll(seconds=30){ fastPollUntil = Date.now() + seconds*1000; }
-setInterval(()=> {
-  if(!EVENT_ID) return;
-  if(document.visibilityState !== 'visible') return;
-  const now = Date.now();
-  if(now <= fastPollUntil){
-    syncFromRemote(); // polling cepat sementara
-  } else {
-    syncFromRemote(); // normal interval 7 detik
-  }
-}, 7000);
-
-/* ================== Export & Clear ================== */
-function toCSV(rows){const H=["id","waktu","gid","nomor","nama","hadir","waktuHadir"];const E=v=>v==null?"":`"${String(v).replace(/"/g,'""')}"`;return[H.map(E).join(",")].concat(rows.map(r=>H.map(h=>E(r[h])).join(","))).join("\r\n");}
+/* ===== Export & Clear ===== */
+function toCSV(rows){const H=["id","waktu","gid","nomor","nama","hadir","waktuHadir","op"];const E=v=>v==null?"":`"${String(v).replace(/"/g,'""')}"`;return[H.map(E).join(",")].concat(rows.map(r=>H.map(h=>E(r[h])).join(","))).join("\r\n");}
 function download(name,text){const blob=new Blob([text],{type:"text/csv;charset=utf-8;"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);}
-document.getElementById("exportCsvBtn").addEventListener("click", async ()=>{ const rows=await byEvent(); download(`buku-tamu-${EVENT_ID}-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows)); });
-document.getElementById("clearAllBtn").addEventListener("click", async ()=>{ if(!confirm("Hapus data lokal (event ini saja)? Server tetap ada."))return; const all=await allLocal(); for(const r of all.filter(x=>x.event===EVENT_ID)){ await delLocal(r.id); } refreshLocalTable(); });
+el("exportCsvBtn").addEventListener("click", async ()=>{ const rows=await byEvent(); download(`buku-tamu-${EVENT_ID}-${new Date().toISOString().slice(0,10)}.csv`, toCSV(rows)); });
+el("clearAllBtn").addEventListener("click", async ()=>{ if(!confirm("Hapus data lokal (event ini saja)? Server tetap ada."))return; const all=await allLocal(); for(const r of all.filter(x=>x.event===EVENT_ID)){ await delLocal(r.id); } refreshLocalTable(); });
 
-/* ================== Native Scanner (BarcodeDetector) ================== */
+/* ===== Scanner (BarcodeDetector) ===== */
 let stream=null, detector=null, rafId=null, scanning=false, lastText="", lastAt=0, currentDeviceId=null;
-function setScanStatus(msg,isErr=false){const el=document.getElementById("scanStatus");el.textContent=msg;el.className="text-sm "+(isErr?"text-rose-600":"text-slate-500");}
+function setScanStatus(msg,isErr=false){const elms=document.getElementById("scanStatus");elms.textContent=msg;elms.className="text-sm "+(isErr?"text-rose-600":"text-slate-500");}
 async function listCameras(){
-  const sel=document.getElementById("cameraSelect"); sel.innerHTML="";
+  const sel=el("cameraSelect"); sel.innerHTML="";
   try{ try{const t=await navigator.mediaDevices.getUserMedia({video:true,audio:false});t.getTracks().forEach(x=>x.stop());}catch{} const devs=await navigator.mediaDevices.enumerateDevices(); const cams=devs.filter(d=>d.kind==="videoinput"); if(!cams.length){ sel.innerHTML=`<option>Tidak ada kamera</option>`; return; } const back=cams.find(c=>/back|rear|environment/i.test(c.label||""))||cams[0]; cams.forEach((d,i)=>{const o=document.createElement("option");o.value=d.deviceId;o.textContent=d.label||`Kamera ${i+1}`;sel.appendChild(o);}); currentDeviceId=back.deviceId; sel.value=currentDeviceId; sel.onchange=e=>{ currentDeviceId=e.target.value; if(scanning){ stopScan().then(startScan); } }; }catch(e){ sel.innerHTML=`<option>Gagal membaca kamera</option>`; }
 }
 async function startScan(){
-  if(!EVENT_ID){ toast("Masuk dulu dengan Event ID + PIN.","warn"); return; }
+  if(!EVENT_ID){ toast("Selesaikan wizard dulu (Undangan + PIN + Operator).","warn"); return; }
+  if(!ACTIVE_OPERATOR){ toast("Pilih/isi operator terlebih dahulu.","warn"); return; }
   if(!IS_SECURE){ setScanStatus("Harus HTTPS/localhost.",true); return; }
   if(!navigator.mediaDevices?.getUserMedia){ setScanStatus("getUserMedia tidak tersedia.",true); return; }
   if(!("BarcodeDetector" in window)){ setScanStatus("Browser belum mendukung BarcodeDetector.",true); return; }
@@ -480,114 +420,97 @@ async function startScan(){
   try{
     const cons=currentDeviceId?{video:{deviceId:{exact:currentDeviceId}},audio:false}:{video:{facingMode:{ideal:"environment"}},audio:false};
     stream=await navigator.mediaDevices.getUserMedia(cons);
-    const reader=document.getElementById("reader"); reader.innerHTML="";
+    const reader=el("reader"); reader.innerHTML="";
     const v=document.createElement("video"); v.id="videoEl"; v.setAttribute("playsinline",""); v.muted=true; v.autoplay=true; v.srcObject=stream; await v.play(); reader.appendChild(v);
     scanning=true; setScanStatus(`Kamera aktif (${fmts.join(", ")}).`);
     const tick=async()=>{ if(!scanning) return; try{ const codes=await detector.detect(v); if(codes && codes.length){ const text=codes[0].rawValue.trim(); const now=Date.now(); if(text!==lastText || now-lastAt>900){ lastText=text; lastAt=now; onScan(text,true); } } }catch{} rafId=requestAnimationFrame(tick); }; tick();
   }catch(e){ setScanStatus(mapMediaError(e),true); }
 }
-async function stopScan(){ scanning=false; if(rafId) cancelAnimationFrame(rafId); if(stream){ try{stream.getTracks().forEach(t=>t.stop());}catch{} stream=null; } document.getElementById("reader").innerHTML='<span class="text-sm text-slate-500">Klik “Mulai Scan”</span>'; setScanStatus("Kamera berhenti."); }
+async function stopScan(){ scanning=false; if(rafId) cancelAnimationFrame(rafId); if(stream){ try{stream.getTracks().forEach(t=>t.stop());}catch{} stream=null; } el("reader").innerHTML='<span class="text-sm text-slate-500">Klik “Mulai Scan”</span>'; setScanStatus("Kamera berhenti."); }
 function mapMediaError(e){const n=e?.name||""; if(n==="NotAllowedError")return"Akses kamera ditolak."; if(n==="NotFoundError")return"Kamera tidak ditemukan."; if(n==="NotReadableError")return"Kamera dipakai app lain."; if(n==="OverconstrainedError")return"Constraint tidak cocok."; if(n==="SecurityError")return"Origin tidak aman."; return `Gagal akses kamera: ${n||e}`;}
 async function testCameraBasic(){ if(!IS_SECURE){alert("Bukan HTTPS/localhost");return;} try{const s=await navigator.mediaDevices.getUserMedia({video:true,audio:false}); s.getTracks().forEach(t=>t.stop()); alert("Kamera OK & izin diberikan.");}catch(e){alert("Gagal akses kamera: "+(e.name||e));} }
 
-/* ================== Auto-Save (ID-only) + Kartu + Duplikat ================== */
+/* ===== Suara ===== */
+let soundOK = new Audio(); let soundDup = new Audio(); let volume = 0.6;
+function loadSounds(){ const ok=localStorage.getItem("sound_ok_url"); const du=localStorage.getItem("sound_dup_url"); if(ok) soundOK.src=ok; if(du) soundDup.src=du; soundOK.volume=soundDup.volume=volume; }
+el("vol").addEventListener("input", e=>{ volume=Number(e.target.value); soundOK.volume=soundDup.volume=volume; });
+["soundOk","soundDup"].forEach((id,idx)=>{
+  el(id).addEventListener("change", (ev)=>{
+    const f=ev.target.files?.[0]; if(!f) return; const url=URL.createObjectURL(f);
+    localStorage.setItem(idx? "sound_dup_url":"sound_ok_url", url); loadSounds(); toast("Suara diperbarui","ok");
+  });
+});
+loadSounds();
+
+/* ===== Kartu Hasil ===== */
+function showScanCard({gid, nama, nomor, status}) {
+  const wrap = el("scanCard");
+  const badge = el("scanBadge");
+  el("scanNama").textContent = nama || "—";
+  el("scanGid").textContent  = gid || "—";
+  el("scanNomor").textContent = nomor || "—";
+  el("scanOp").textContent = ACTIVE_OPERATOR || "—";
+  el("scanStatusText").textContent = status;
+  el("scanTime").textContent = isoToLocal(new Date().toISOString());
+  if (status === "DUPLIKAT") {
+    badge.textContent = "⚠️";
+    badge.className = "shrink-0 w-10 h-10 rounded-full grid place-items-center text-xl bg-amber-100 text-amber-700 ring-1 ring-amber-200";
+    el("scanCardInner").className = "rounded-xl ring-1 ring-amber-200 bg-amber-50 p-3 flex items-center gap-3";
+  } else {
+    badge.textContent = "✓";
+    badge.className = "shrink-0 w-10 h-10 rounded-full grid place-items-center text-xl bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200";
+    el("scanCardInner").className = "rounded-xl ring-1 ring-emerald-200 bg-emerald-50 p-3 flex items-center gap-3";
+  }
+  wrap.classList.remove("hidden");
+}
+
+/* ===== Auto Save + Duplikat ===== */
 async function autoSaveFromScan(gid, nama="", nomor=""){
   if(!EVENT_ID) return;
   const nowISO = new Date().toISOString();
-
-  // Ambil data tamu dari server (kalau ada)
-  let r;
-  try { r = await remoteGetByGid(gid); } catch(e){ toast("Cek GID gagal: "+e.message,"err"); return; }
-
+  let r; try{ r = await remoteGetByGid(gid); }catch(e){ toast("Cek GID gagal: "+e.message, "err"); return; }
   const nameResolved  = (r && r.nama)  ? r.nama  : (nama || "");
   const nomorResolved = (r && r.nomor) ? r.nomor : (nomor || "");
 
-  // ===== DUPLIKAT: sudah hadir =====
+  // Duplikat
   if (r && r.hadir) {
-    document.getElementById("lastResult").textContent = `${gid}${nameResolved? " • "+nameResolved : ""}`;
+    el("lastResult").textContent = `${gid}${nameResolved? " • "+nameResolved : ""}`;
     const loc = await findLocal(gid);
-    if (loc) {
-      if (nameResolved && !loc.nama)  loc.nama  = nameResolved;
-      if (nomorResolved && !loc.nomor) loc.nomor = nomorResolved;
-      loc.hadir = true;
-      loc.waktuHadir = r.waktuHadir || loc.waktuHadir;
-      await putLocal(loc);
-    } else {
-      await addLocal({
-        event: EVENT_ID, event_gid: `${EVENT_ID}|${gid}`,
-        waktu: r.waktu || nowISO, gid,
-        nama: nameResolved, nomor: nomorResolved,
-        hadir: true, waktuHadir: r.waktuHadir || nowISO
-      });
-    }
+    if (loc) { if (nameResolved && !loc.nama)  loc.nama  = nameResolved; if (nomorResolved && !loc.nomor) loc.nomor = nomorResolved; loc.hadir = true; loc.waktuHadir = r.waktuHadir || loc.waktuHadir; loc.op = ACTIVE_OPERATOR; await putLocal(loc); }
+    else { await addLocal({ event: EVENT_ID, event_gid: `${EVENT_ID}|${gid}`, waktu: r.waktu || nowISO, gid, nama: nameResolved, nomor: nomorResolved, hadir: true, waktuHadir: r.waktuHadir || nowISO, op: ACTIVE_OPERATOR }); }
     showScanCard({ gid, nama: nameResolved, nomor: nomorResolved, status: "DUPLIKAT" });
-    if (nameResolved)  document.getElementById("nama").value = nameResolved;
-    if (nomorResolved) document.getElementById("nomorTamu").value = nomorResolved;
-
     try { soundDup.currentTime=0; soundDup.play().catch(()=>{}); } catch {}
-    await refreshLocalTable();
-    startFastPoll(20);     // percepat polling sebentar
-    return;
+    await refreshLocalTable(); startFastPoll(20); return;
   }
 
-  // ===== BARU / BELUM HADIR =====
+  // Baru / belum hadir
   try{
-    if (r) {
-      await remoteUpdate(gid, {
-        hadir: true, waktuHadir: nowISO,
-        nama:  nameResolved || r.nama || null,
-        nomor: nomorResolved || r.nomor || null
-      });
-    } else {
-      await remoteInsert({
-        event_id: EVENT_ID, guest_id: gid,
-        nama: nameResolved, nomor: nomorResolved,
-        hadir: true, waktu: nowISO, waktuHadir: nowISO
-      });
-    }
-  }catch(e){
-    toast("Simpan ke server gagal: "+e.message,"err");
-    return;
-  }
+    if (r) await remoteUpdate(gid, {hadir:true, waktuHadir:nowISO, nama: nameResolved || r.nama || null, nomor: nomorResolved || r.nomor || null});
+    else   await remoteInsert({event_id:EVENT_ID, guest_id:gid, nama: nameResolved, nomor: nomorResolved, hadir:true, waktu:nowISO, waktuHadir:nowISO});
+  }catch(e){ toast("Simpan server gagal: "+e.message,"err"); return; }
 
-  // Lokal upsert
   const loc = await findLocal(gid);
-  if (loc) {
-    if (nameResolved && !loc.nama)  loc.nama  = nameResolved;
-    if (nomorResolved && !loc.nomor) loc.nomor = nomorResolved;
-    loc.hadir = true; loc.waktuHadir = nowISO;
-    await putLocal(loc);
-  } else {
-    await addLocal({
-      event: EVENT_ID, event_gid: `${EVENT_ID}|${gid}`,
-      waktu: nowISO, gid,
-      nama: nameResolved, nomor: nomorResolved,
-      hadir: true, waktuHadir: nowISO
-    });
-  }
+  if (loc) { if (nameResolved && !loc.nama)  loc.nama  = nameResolved; if (nomorResolved && !loc.nomor) loc.nomor = nomorResolved; loc.hadir = true; loc.waktuHadir = nowISO; loc.op = ACTIVE_OPERATOR; await putLocal(loc); }
+  else { await addLocal({ event: EVENT_ID, event_gid: `${EVENT_ID}|${gid}`, waktu: nowISO, gid, nama: nameResolved, nomor: nomorResolved, hadir: true, waktuHadir: nowISO, op: ACTIVE_OPERATOR }); }
 
-  document.getElementById("lastResult").textContent = `${gid}${nameResolved? " • "+nameResolved : ""}`;
+  el("lastResult").textContent = `${gid}${nameResolved? " • "+nameResolved : ""}`;
   showScanCard({ gid, nama: nameResolved, nomor: nomorResolved, status: "HADIR" });
-  if (nameResolved)  document.getElementById("nama").value = nameResolved;
-  if (nomorResolved) document.getElementById("nomorTamu").value = nomorResolved;
-
   try { soundOK.currentTime=0; soundOK.play().catch(()=>{});} catch {}
-  await refreshLocalTable();
-  startFastPoll(30);       // percepat polling setelah ada perubahan
+  await refreshLocalTable(); startFastPoll(30);
 }
 function onScan(raw, auto=false){
   const gid = raw.trim();
-  document.getElementById("barcodeValue").value = gid; // prefill
+  el("barcodeValue").value = gid; // prefill
   if (auto) autoSaveFromScan(gid);
 }
 
-/* ================== Manual Save ================== */
-function setStatus(msg,isErr=false){const el=document.getElementById("statusMsg");el.textContent=msg;el.className="text-sm "+(isErr?"text-rose-600":"text-slate-500");}
+/* ===== Manual Save ===== */
+function setStatus(msg,isErr=false){const e=el("statusMsg");e.textContent=msg;e.className="text-sm "+(isErr?"text-rose-600":"text-slate-500");}
 async function handleSave(markPresent=false){
   if(!EVENT_ID){ setStatus("Belum login acara.", true); return; }
-  const gid=(document.getElementById("barcodeValue").value||"").trim();
-  const nama=(document.getElementById("nama").value||"").trim();
-  const nomor=(document.getElementById("nomorTamu").value||"").trim();
+  const gid=(el("barcodeValue").value||"").trim();
+  const nama=(el("nama").value||"").trim();
+  const nomor=(el("nomorTamu").value||"").trim();
   if(!gid){ setStatus("GID wajib diisi.",true); return; }
   const nowISO=new Date().toISOString();
   try{
@@ -597,93 +520,191 @@ async function handleSave(markPresent=false){
   }catch(e){ setStatus("Server error: "+e.message,true); return; }
 
   const loc = await findLocal(gid);
-  if(loc){ loc.nama=nama||loc.nama; loc.nomor=nomor||loc.nomor; if(markPresent){ loc.hadir=true; loc.waktuHadir=nowISO; } await putLocal(loc); }
-  else { await addLocal({ event:EVENT_ID, event_gid:`${EVENT_ID}|${gid}`, waktu:nowISO, gid, nama, nomor, hadir:markPresent, waktuHadir: markPresent? nowISO:null }); }
-  setStatus(markPresent?"Tersimpan + Hadir.":"Tersimpan."); refreshLocalTable();
-  startFastPoll(20);
+  if(loc){ loc.nama=nama||loc.nama; loc.nomor=nomor||loc.nomor; if(markPresent){ loc.hadir=true; loc.waktuHadir=nowISO; } loc.op = ACTIVE_OPERATOR; await putLocal(loc); }
+  else { await addLocal({ event:EVENT_ID, event_gid:`${EVENT_ID}|${gid}`, waktu:nowISO, gid, nama, nomor, hadir:markPresent, waktuHadir: markPresent? nowISO:null, op: ACTIVE_OPERATOR }); }
+  setStatus(markPresent?"Tersimpan + Hadir.":"Tersimpan."); refreshLocalTable(); startFastPoll(20);
 }
 
-/* ================== RSVP Generate (ID Only) ================== */
-document.getElementById("rsvpForm").addEventListener("submit", async (e)=>{
+/* ===== RSVP Generate (ID Only) ===== */
+el("rsvpForm").addEventListener("submit", async (e)=>{
   e.preventDefault();
   if(!EVENT_ID){ setRSVPStatus("Login acara dulu.", true); return; }
-  const nama=document.getElementById("rsvpNama").value.trim();
-  let nomor=document.getElementById("rsvpNomor").value.trim();
-  let gidInput=(document.getElementById("rsvpGid").value||"").trim();
-  const auto=document.getElementById("autoNomor").checked;
+  const nama=el("rsvpNama").value.trim();
+  let nomor=el("rsvpNomor").value.trim();
+  let gidInput=(el("rsvpGid").value||"").trim();
+  const auto=el("autoNomor").checked;
   if(!nama){ setRSVPStatus("Nama wajib diisi.", true); return; }
-  if(auto || !nomor){ // nomor otomatis
-    const rows = await byEvent();
-    const ns = rows.map(r=>Number(r.nomor)).filter(Number.isFinite);
-    nomor = ns.length? String(Math.max(...ns)+1) : "1";
-    document.getElementById("rsvpNomor").value = nomor;
+  if(auto || !nomor){
+    const rows = await byEvent(); const ns = rows.map(r=>Number(r.nomor)).filter(Number.isFinite);
+    nomor = ns.length? String(Math.max(...ns)+1) : "1"; el("rsvpNomor").value = nomor;
   }
   const gidVal = gidInput || gid(8);
 
-  // buat QR: payload = GID saja
-  document.getElementById("qrContainer").innerHTML="";
+  // QR
+  el("qrContainer").innerHTML="";
   if (document.querySelector('input[name="qrtype"]:checked')?.value === "code128") {
-    const svg=document.createElementNS("http://www.w3.org/2000/svg","svg"); document.getElementById("qrContainer").appendChild(svg);
+    const svg=document.createElementNS("http://www.w3.org/2000/svg","svg"); el("qrContainer").appendChild(svg);
     try{ JsBarcode(svg, gidVal, {format:"code128", width:2, height:100, margin:8, displayValue:false}); }catch{}
   } else {
-    new QRCode(document.getElementById("qrContainer"), { text: gidVal, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(el("qrContainer"), { text: gidVal, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
   }
-  document.getElementById("downloadQrBtn").disabled=false;
+  el("downloadQrBtn").disabled=false;
 
-  document.getElementById("eventBox").textContent = EVENT_ID;
-  document.getElementById("gidBox").textContent = gidVal;
-  document.getElementById("nameBox").textContent = nama;
-  document.getElementById("numBox").textContent = nomor;
+  el("eventBox").textContent = EVENT_ID;
+  el("gidBox").textContent = gidVal;
+  el("nameBox").textContent = nama;
+  el("numBox").textContent = nomor;
 
-  // simpan draft ke server + lokal
+  // simpan draft
   const nowISO = new Date().toISOString();
-  try{
-    let r=await remoteGetByGid(gidVal);
-    if(!r) await remoteInsert({event_id:EVENT_ID, guest_id:gidVal, nama, nomor, hadir:false, waktu:nowISO, waktuHadir:null});
-  }catch(e){ setRSVPStatus("Server error: "+e.message,true); return; }
+  try{ let r=await remoteGetByGid(gidVal); if(!r) await remoteInsert({event_id:EVENT_ID, guest_id:gidVal, nama, nomor, hadir:false, waktu:nowISO, waktuHadir:null}); }
+  catch(e){ setRSVPStatus("Server error: "+e.message,true); return; }
   const loc = await findLocal(gidVal);
-  if(!loc) await addLocal({ event:EVENT_ID, event_gid:`${EVENT_ID}|${gidVal}`, waktu:nowISO, gid:gidVal, nama, nomor, hadir:false, waktuHadir:null });
+  if(!loc) await addLocal({ event:EVENT_ID, event_gid:`${EVENT_ID}|${gidVal}`, waktu:nowISO, gid:gidVal, nama, nomor, hadir:false, waktuHadir:null, op: null });
   await refreshLocalTable();
-  setRSVPStatus("QR dibuat (ID only).");
-  startFastPoll(20);
+  setRSVPStatus("QR dibuat (ID only)."); startFastPoll(20);
 });
-function setRSVPStatus(msg,isErr=false){const el=document.getElementById("rsvpStatus"); el.textContent=msg; el.className="text-sm "+(isErr?"text-rose-600":"text-slate-500");}
-document.getElementById("downloadQrBtn").addEventListener("click",()=>{
-  const cont=document.getElementById("qrContainer"); const img=cont.querySelector("img");
-  const filename=`GID-${document.getElementById("gidBox").textContent}.png`;
+function setRSVPStatus(msg,isErr=false){const elr=el("rsvpStatus"); elr.textContent=msg; elr.className="text-sm "+(isErr?"text-rose-600":"text-slate-500");}
+el("downloadQrBtn").addEventListener("click",()=>{
+  const cont=el("qrContainer"); const img=cont.querySelector("img"); const filename=`GID-${el("gidBox").textContent}.png`;
   if(img){ const a=document.createElement("a"); a.href=img.src; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); return; }
   const svg=cont.querySelector("svg"); if(svg){ const xml=new XMLSerializer().serializeToString(svg); const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml); const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); }
 });
 
-/* ================== Bindings ================== */
-document.getElementById("guestForm").addEventListener("submit", async (e)=>{ e.preventDefault(); await handleSave(false); });
-document.getElementById("markPresentBtn").addEventListener("click", async ()=>{ await handleSave(true); });
-document.getElementById("searchInput").addEventListener("input", refreshLocalTable);
-document.getElementById("fileInput").addEventListener("change", async (e)=>{
-  if(!EVENT_ID){ toast("Login acara dulu.","warn"); e.target.value=""; return; }
+/* ===== Wizard Logic ===== */
+function opsKey(){ return `ops_${EVENT_ID}`; }
+function saveOperatorsLocal(){
+  localStorage.setItem(opsKey(), JSON.stringify(OPERATORS));
+  localStorage.setItem(`active_op_${EVENT_ID}`, ACTIVE_OPERATOR || "");
+}
+function loadOperatorsLocal(){
+  try{ const arr = JSON.parse(localStorage.getItem(opsKey())||"[]"); OPERATORS = Array.isArray(arr)? arr.filter(x=>x && x.trim()):[]; }catch{ OPERATORS=[]; }
+  ACTIVE_OPERATOR = localStorage.getItem(`active_op_${EVENT_ID}`) || (OPERATORS[0]||"");
+}
+function renderOpInputs(){
+  const c = el("opInputs"); c.innerHTML=""; const n = Math.max(1, Math.min(10, Number(el("opCount").value||1)));
+  for(let i=0;i<n;i++){ const input=document.createElement("input"); input.className="rounded-lg border-slate-300 focus:ring-blue-500"; input.placeholder=`Nama operator ${i+1}`; input.value=OPERATORS[i]||""; input.dataset.idx=i; c.appendChild(input); }
+}
+function renderActiveOpSelect(){
+  const sel = el("activeOpSelect"); sel.innerHTML="";
+  for(const name of OPERATORS){ const o=document.createElement("option"); o.value=name; o.textContent=name; sel.appendChild(o); }
+  sel.value = ACTIVE_OPERATOR || OPERATORS[0] || "";
+  sel.onchange = ()=>{ ACTIVE_OPERATOR = sel.value; saveOperatorsLocal(); };
+}
+function setAppVisible(v){
+  if(v){ wizard.classList.add("hidden"); appMain.classList.remove("hidden"); }
+  else { appMain.classList.add("hidden"); wizard.classList.remove("hidden"); }
+}
+async function verifyEvent(selectedId, pin){
+  if(!REMOTE_ENABLED) return true;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/events?id=eq.${encodeURIComponent(selectedId)}&pin=eq.${encodeURIComponent(pin)}&select=id,name,theme`, {headers: RH});
+  const j = r.ok ? await r.json() : [];
+  return j.length>0 ? j[0] : null;
+}
+
+/* Wizard events */
+el("eventSearch").addEventListener("input", populateEventOptions);
+el("verifyBtn").addEventListener("click", async ()=>{
+  const evId = el("eventSelect").value;
+  const pin  = el("pinInput").value.trim();
+  if(!evId){ el("verifyStatus").textContent="Pilih undangan terlebih dahulu."; return; }
+  if(!pin){ el("verifyStatus").textContent="Masukkan PIN."; return; }
+  const ok = await verifyEvent(evId, pin);
+  if(!ok){ el("verifyStatus").textContent="PIN salah atau event tidak ditemukan."; toast("Verifikasi gagal","err"); return; }
+  EVENT_ID = evId; EVENT_PIN = pin;
+  localStorage.setItem("event_id",EVENT_ID);
+  localStorage.setItem("event_pin",EVENT_PIN);
+  el("verifyStatus").textContent=`Event terverifikasi: ${EVENT_ID}`;
+  toast("PIN benar. Lanjut isi operator.","ok");
+
+  // load operator lokal jika sudah pernah
+  loadOperatorsLocal();
+  el("opBlock").classList.remove("hidden");
+  renderOpInputs();
+  // badge di app
+  el("eventBadge").textContent = (eventsCache.find(x=>x.id===EVENT_ID)?.name || EVENT_ID);
+  el("eventBox").textContent = EVENT_ID;
+});
+el("opCount").addEventListener("input", renderOpInputs);
+el("startAppBtn").addEventListener("click", ()=>{
+  const inputs = [...el("opInputs").querySelectorAll("input")];
+  OPERATORS = inputs.map(i=>i.value.trim()).filter(Boolean);
+  if(!OPERATORS.length){ toast("Minimal 1 operator diisi.","warn"); return; }
+  ACTIVE_OPERATOR = OPERATORS[0];
+  saveOperatorsLocal();
+  renderActiveOpSelect();
+  setAppVisible(true);
+  startFastPoll(45);
+  syncFromRemote();
+});
+el("logoutBtn").addEventListener("click", ()=>{
+  EVENT_ID=""; EVENT_PIN=""; OPERATORS=[]; ACTIVE_OPERATOR="";
+  localStorage.removeItem("event_id"); localStorage.removeItem("event_pin");
+  setAppVisible(false);
+  el("verifyStatus").textContent="";
+  el("opBlock").classList.add("hidden");
+});
+
+/* ===== Fast Polling ===== */
+let fastPollUntil = 0;
+function startFastPoll(seconds=30){ fastPollUntil = Date.now() + seconds*1000; }
+setInterval(()=> {
+  if(!EVENT_ID) return;
+  if(document.visibilityState !== 'visible') return;
+  const now = Date.now();
+  if(now <= fastPollUntil){ syncFromRemote(); } else { syncFromRemote(); }
+}, 7000);
+
+/* ===== Bindings ===== */
+el("guestForm").addEventListener("submit", async (e)=>{ e.preventDefault(); await handleSave(false); });
+el("markPresentBtn").addEventListener("click", async ()=>{ await handleSave(true); });
+el("searchInput").addEventListener("input", refreshLocalTable);
+el("fileInput").addEventListener("change", async (e)=>{
+  if(!EVENT_ID){ toast("Selesaikan wizard dulu.","warn"); e.target.value=""; return; }
   const f=e.target.files?.[0]; if(!f) return;
   if(!("BarcodeDetector" in window)){ toast("Device tidak dukung scan file tanpa library.", "err"); return; }
   const bmp=await createImageBitmap(f); const det=new BarcodeDetector({formats:['qr_code']}); const res=await det.detect(bmp);
   if(res&&res.length){ onScan(res[0].rawValue, true); } else toast("Tidak terbaca dari gambar.","warn");
   e.target.value="";
 });
-document.getElementById("startBtn").addEventListener("click", startScan);
-document.getElementById("stopBtn").addEventListener("click", stopScan);
-document.getElementById("testCamBtn").addEventListener("click", testCameraBasic);
+el("startBtn").addEventListener("click", startScan);
+el("stopBtn").addEventListener("click", stopScan);
+el("testCamBtn").addEventListener("click", testCameraBasic);
 
-/* ================== INIT ================== */
-(async function(){ db=await openDB(); await listCameras(); await refreshLocalTable(); if(EVENT_ID) await syncFromRemote(); updateDiag(true); })();
+/* ===== INIT ===== */
+(async function(){
+  db = await openDB();
+  await listCameras();
+  await refreshLocalTable();
+  updateDiag();
+  await fetchEventsList();
 
-/* ====== SQL Supabase (jalankan sekali di SQL Editor) =============
+  // Auto-continue jika sudah ada event & operators tersimpan
+  if(EVENT_ID){
+    loadOperatorsLocal();
+    if(OPERATORS.length){
+      el("eventBadge").textContent = EVENT_ID;
+      renderActiveOpSelect();
+      setAppVisible(true);
+      startFastPoll(30);
+      syncFromRemote();
+    }
+  }
+})();
+</script>
 
--- Table daftar event + PIN (demo; untuk produksi pakai Auth/hashed PIN)
+<!-- ==================== SQL Supabase ====================
+-- Tabel events (Undangan)
 create table if not exists public.events (
-  id text primary key,
-  name text,
-  pin text
+  id text primary key,   -- misal: WEDD-2025-ANDIN-DAFA
+  name text,             -- misal: "Andin & Dafa"
+  theme text,            -- opsional: "Jawa"
+  pin text               -- demo: plaintext
 );
+alter table public.events enable row level security;
+create policy if not exists read_events on public.events for select using (true);
 
--- Tamu (unik per event + gid)
+-- Tabel guests (Buku Tamu)
 create table if not exists public.guests (
   id bigint generated by default as identity primary key,
   event_id text references public.events(id) on delete cascade,
@@ -695,19 +716,14 @@ create table if not exists public.guests (
   "waktuHadir" timestamptz,
   unique(event_id, guest_id)
 );
-
-alter table public.events enable row level security;
 alter table public.guests enable row level security;
-
-create policy if not exists "read_events" on public.events for select using (true);
 create policy if not exists "read_guests" on public.guests for select using (true);
 create policy if not exists "ins_guests" on public.guests for insert with check (true);
 create policy if not exists "upd_guests" on public.guests for update using (true);
 
--- Contoh event:
--- insert into public.events(id, name, pin) values ('AYAT33-001','Wedding Ayat & Nisa','2580');
-
-================================================================== */
-</script>
+-- (Opsional) Jika ingin simpan nama operator per kehadiran, tambahkan kolom berikut:
+-- alter table public.guests add column if not exists op text;
+-- lalu di kode, bisa ikut kirim { op: ACTIVE_OPERATOR } saat insert/update.
+<!- ===================================================== -->
 </body>
 </html>
