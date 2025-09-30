@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Buku Tamu – ID Only (Multi-Device, Auto Save, Duplikat Alert)</title>
+<title>Buku Tamu – ID Only (Multi-Device, Auto Save, Duplikat + Kartu + Diagnostik)</title>
 
-<!-- Tailwind minimal -->
+<!-- Tailwind (styling) -->
 <script src="https://cdn.tailwindcss.com"></script>
 
-<!-- QR & Barcode (hanya untuk membuat QR undangan); jika CDN ini diblok, fitur scan tetap jalan -->
+<!-- Generator QR / Code128 (untuk membuat QR RSVP; scanner TIDAK bergantung ini) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 
@@ -25,7 +25,7 @@
   <!-- ================= Header & Login ================= -->
   <header class="space-y-1">
     <h1 class="text-2xl font-semibold">Buku Tamu Wedding – ID Only</h1>
-    <p class="text-slate-600 text-sm">QR hanya berisi <b>GID</b>. Multi-device (Supabase). Scan ➜ auto tersimpan & hadir. Duplikat ➜ notifikasi + bunyi.</p>
+    <p class="text-slate-600 text-sm">QR hanya berisi <b>GID</b>. Multi-device (Supabase). Scan ➜ auto tersimpan & hadir. Duplikat ➜ notifikasi + bunyi + kartu hasil.</p>
     <p id="secureWarn" class="hidden text-rose-600 text-sm">Harus HTTPS / http://localhost untuk akses kamera.</p>
   </header>
 
@@ -69,10 +69,29 @@
         <button id="testCamBtn" class="py-2 px-4 rounded-lg bg-amber-600 text-white">Test</button>
       </div>
     </div>
-    <div class="mt-3" id="reader" class="min-h-[220px]"></div>
+
+    <div class="mt-3" id="reader"><span class="text-sm text-slate-500">Klik “Mulai Scan”</span></div>
+
     <div class="mt-2 flex items-center justify-between text-sm">
       <div>Hasil: <span id="lastResult" class="font-mono text-emerald-700">—</span></div>
       <div id="scanStatus" class="text-slate-500"></div>
+    </div>
+
+    <!-- Kartu hasil scan -->
+    <div id="scanCard" class="mt-3 hidden">
+      <div id="scanCardInner" class="rounded-xl ring-1 ring-slate-200 bg-white p-3 flex items-center gap-3">
+        <div id="scanBadge" class="shrink-0 w-10 h-10 rounded-full grid place-items-center text-xl">✓</div>
+        <div class="flex-1">
+          <div class="text-lg font-semibold leading-tight" id="scanNama">—</div>
+          <div class="text-sm text-slate-600">
+            GID: <span id="scanGid" class="font-mono">—</span>
+            · Nomor: <span id="scanNomor" class="font-mono">—</span>
+          </div>
+          <div class="text-xs text-slate-500 mt-0.5">
+            Status: <span id="scanStatusText">—</span> · Waktu: <span id="scanTime">—</span>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -159,6 +178,17 @@
     </div>
   </section>
 
+  <!-- ================= Panel Diagnostik ================= -->
+  <section class="bg-white ring-1 ring-slate-200 rounded-xl p-3 md:p-4">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+      <div id="diagText" class="text-sm">Remote: — | Event: — | Last sync: —</div>
+      <div class="flex gap-2">
+        <button id="syncNowBtn" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white">Sync Sekarang</button>
+        <button id="testRemoteBtn" class="px-3 py-1.5 rounded-lg bg-slate-700 text-white">Uji Koneksi</button>
+      </div>
+    </div>
+  </section>
+
   <!-- ================= Tabel ================= -->
   <section class="bg-white ring-1 ring-slate-200 rounded-xl p-4">
     <div class="flex items-center justify-between mb-2">
@@ -183,8 +213,8 @@
 
 <script>
 /* ================== SUPABASE CONFIG ================== */
-const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co";
-const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
+const SUPABASE_URL = "https://YOUR-PROJECT.supabase.co"; // ← ganti
+const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";               // ← ganti
 const REMOTE_ENABLED = SUPABASE_URL.startsWith("https://") && !SUPABASE_ANON_KEY.includes("YOUR-");
 const RH = REMOTE_ENABLED ? {
   "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer "+SUPABASE_ANON_KEY,
@@ -198,13 +228,42 @@ const two=n=>String(n).padStart(2,"0");
 const isoToLocal=iso=>{const d=new Date(iso);return `${two(d.getDate())}/${two(d.getMonth()+1)}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}`;}
 function gid(len=8){return Array.from(crypto.getRandomValues(new Uint8Array(len)),b=>(b%36).toString(36)).join('');}
 const toastBox=document.getElementById("toast");
-function toast(msg,type="info"){ const el=document.createElement("div"); el.className=`mb-2 px-3 py-2 rounded-lg shadow text-sm ${type==="ok"?"bg-emerald-600 text-white":type==="warn"?"bg-amber-600 text-white":type==="err"?"bg-rose-600 text-white":"bg-slate-800 text-white"}`; el.textContent=msg; toastBox.appendChild(el); setTimeout(()=>el.remove(),3000); }
+function toast(msg,type="info"){ const el=document.createElement("div"); el.className=`mb-2 px-3 py-2 rounded-lg shadow text-sm ${type==="ok"?"bg-emerald-600 text-white":type==="warn"?"bg-amber-600 text-white":type==="err"?"bg-rose-600 text-white":"bg-slate-800 text-white"}`; el.textContent=msg; toastBox.appendChild(el); setTimeout(()=>el.remove(),3500); }
 
-/* ================== Login Acara (Event ID + PIN) ================== */
+/* ====== Kartu Hasil ====== */
+function showScanCard({gid, nama, nomor, status}) {
+  const wrap = document.getElementById("scanCard");
+  const badge = document.getElementById("scanBadge");
+  const namaEl = document.getElementById("scanNama");
+  const gidEl  = document.getElementById("scanGid");
+  const noEl   = document.getElementById("scanNomor");
+  const stEl   = document.getElementById("scanStatusText");
+  const tmEl   = document.getElementById("scanTime");
+
+  namaEl.textContent = nama || "—";
+  gidEl.textContent  = gid || "—";
+  noEl.textContent   = nomor || "—";
+  stEl.textContent   = status;
+  tmEl.textContent   = isoToLocal(new Date().toISOString());
+
+  if (status === "DUPLIKAT") {
+    badge.textContent = "⚠️";
+    badge.className = "shrink-0 w-10 h-10 rounded-full grid place-items-center text-xl bg-amber-100 text-amber-700 ring-1 ring-amber-200";
+    document.getElementById("scanCardInner").className =
+      "rounded-xl ring-1 ring-amber-200 bg-amber-50 p-3 flex items-center gap-3";
+  } else {
+    badge.textContent = "✓";
+    badge.className = "shrink-0 w-10 h-10 rounded-full grid place-items-center text-xl bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200";
+    document.getElementById("scanCardInner").className =
+      "rounded-xl ring-1 ring-emerald-200 bg-emerald-50 p-3 flex items-center gap-3";
+  }
+  wrap.classList.remove("hidden");
+}
+
+/* ================== Login Acara ================== */
 let EVENT_ID = localStorage.getItem("event_id") || "";
 let EVENT_PIN = localStorage.getItem("event_pin") || "";
 let OPERATOR = localStorage.getItem("operator") || "";
-const loginCard = document.getElementById("loginCard");
 const loginStatus = document.getElementById("loginStatus");
 function setLoginUI(){
   document.getElementById("eventIdInput").value = EVENT_ID;
@@ -212,9 +271,10 @@ function setLoginUI(){
   document.getElementById("operatorInput").value = OPERATOR;
   document.getElementById("eventBox").textContent = EVENT_ID || "—";
   document.getElementById("logoutBtn").classList.toggle("hidden", !EVENT_ID);
+  updateDiag(true);
 }
 async function verifyEvent(id, pin){
-  if(!REMOTE_ENABLED) return true; // mode lokal
+  if(!REMOTE_ENABLED) return true;
   const r = await fetch(`${SUPABASE_URL}/rest/v1/events?id=eq.${encodeURIComponent(id)}&pin=eq.${encodeURIComponent(pin)}&select=id`, {headers: RH});
   const j = r.ok ? await r.json() : [];
   return j.length>0;
@@ -232,7 +292,9 @@ document.getElementById("loginBtn").addEventListener("click", async ()=>{
   localStorage.setItem("operator",OPERATOR);
   loginStatus.textContent=`Login acara: ${EVENT_ID}`;
   toast("Login berhasil","ok");
-  setLoginUI(); syncFromRemote();
+  setLoginUI();
+  startFastPoll(45);           // fast polling setelah login
+  syncFromRemote();
 });
 document.getElementById("logoutBtn").addEventListener("click", ()=>{
   EVENT_ID=""; EVENT_PIN=""; OPERATOR="";
@@ -265,11 +327,64 @@ const findLocal=(gid)=>new Promise((res,rej)=>{const q=tx("readonly").index("eve
 const delLocal=(id)=>new Promise((res,rej)=>{const q=tx("readwrite").delete(id);q.onsuccess=()=>res(true);q.onerror=()=>rej(q.error);});
 const clearLocal=()=>new Promise((res,rej)=>{const q=tx("readwrite").clear();q.onsuccess=()=>res(true);q.onerror=()=>rej(q.error);});
 
-/* ================== Supabase REST (ID-only) ================== */
-async function remoteGetAll(){ if(!REMOTE_ENABLED||!EVENT_ID) return []; const r=await fetch(`${SUPABASE_URL}/rest/v1/guests?event_id=eq.${encodeURIComponent(EVENT_ID)}&select=*&order=waktu.desc`,{headers:RH}); return r.ok? r.json():[]; }
-async function remoteGetByGid(gid){ if(!REMOTE_ENABLED||!EVENT_ID) return null; const r=await fetch(`${SUPABASE_URL}/rest/v1/guests?event_id=eq.${encodeURIComponent(EVENT_ID)}&guest_id=eq.${encodeURIComponent(gid)}&select=*`,{headers:RH}); const j=r.ok? await r.json():[]; return j[0]||null; }
-async function remoteInsert(row){ if(!REMOTE_ENABLED||!EVENT_ID) return null; const r=await fetch(`${SUPABASE_URL}/rest/v1/guests`,{method:"POST",headers:RH,body:JSON.stringify(row)}); return r.ok? (await r.json())[0]:null; }
-async function remoteUpdate(gid,patch){ if(!REMOTE_ENABLED||!EVENT_ID) return null; const r=await fetch(`${SUPABASE_URL}/rest/v1/guests?event_id=eq.${encodeURIComponent(EVENT_ID)}&guest_id=eq.${encodeURIComponent(gid)}`,{method:"PATCH",headers:RH,body:JSON.stringify(patch)}); return r.ok? (await r.json())[0]:null; }
+/* ================== Diagnostik ================== */
+let LAST_SYNC_AT = null;
+function updateDiag(ok=true, msg="") {
+  const t = document.getElementById('diagText');
+  const ls = LAST_SYNC_AT ? new Date(LAST_SYNC_AT).toLocaleTimeString() : "—";
+  const remote = REMOTE_ENABLED ? 'ON' : 'OFF';
+  const eventId = EVENT_ID || '—';
+  t.textContent = `Remote: ${remote} | Event: ${eventId} | Last sync: ${ls}${msg? ' | '+msg : ''}`;
+}
+async function testRemote() {
+  if (!REMOTE_ENABLED) {
+    toast('REMOTE OFF: Supabase URL/Anon Key belum diset.', 'err');
+    updateDiag(false, 'REMOTE OFF');
+    return;
+  }
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/guests?select=count`, { headers: RH });
+    if (!r.ok) throw new Error(`HTTP ${r.status} pada /guests (cek tabel/policy).`);
+    toast('Koneksi Supabase OK.', 'ok');
+    updateDiag(true, 'OK');
+  } catch (e) {
+    toast('Gagal konek: ' + e.message, 'err');
+    updateDiag(false, 'Err: ' + e.message);
+  }
+}
+document.getElementById('syncNowBtn').addEventListener('click', syncFromRemote);
+document.getElementById('testRemoteBtn').addEventListener('click', testRemote);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') syncFromRemote(); });
+
+/* ================== Supabase REST (ID-only) + error detail ================== */
+async function remoteGetAll(){
+  if(!REMOTE_ENABLED||!EVENT_ID) return [];
+  const url = `${SUPABASE_URL}/rest/v1/guests?event_id=eq.${encodeURIComponent(EVENT_ID)}&select=*&order=waktu.desc`;
+  const r = await fetch(url,{headers:RH});
+  if(!r.ok) throw new Error(`GET /guests gagal (HTTP ${r.status}). Pastikan tabel 'guests' & policy SELECT aktif.`);
+  return r.json();
+}
+async function remoteGetByGid(gid){
+  if(!REMOTE_ENABLED||!EVENT_ID) return null;
+  const url = `${SUPABASE_URL}/rest/v1/guests?event_id=eq.${encodeURIComponent(EVENT_ID)}&guest_id=eq.${encodeURIComponent(gid)}&select=*`;
+  const r = await fetch(url,{headers:RH});
+  if(!r.ok) throw new Error(`GET /guests (by gid) gagal (HTTP ${r.status}).`);
+  const j = await r.json();
+  return j[0]||null;
+}
+async function remoteInsert(row){
+  if(!REMOTE_ENABLED||!EVENT_ID) return null;
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/guests`,{method:"POST",headers:RH,body:JSON.stringify(row)});
+  if(!r.ok) throw new Error(`INSERT /guests gagal (HTTP ${r.status}). Cek policy INSERT.`);
+  const j = await r.json(); return j[0];
+}
+async function remoteUpdate(gid,patch){
+  if(!REMOTE_ENABLED||!EVENT_ID) return null;
+  const url = `${SUPABASE_URL}/rest/v1/guests?event_id=eq.${encodeURIComponent(EVENT_ID)}&guest_id=eq.${encodeURIComponent(gid)}`;
+  const r = await fetch(url,{method:"PATCH",headers:RH,body:JSON.stringify(patch)});
+  if(!r.ok) throw new Error(`UPDATE /guests gagal (HTTP ${r.status}). Cek policy UPDATE.`);
+  const j = await r.json(); return j[0];
+}
 
 /* ================== Tabel & Sync ================== */
 function renderTable(rows){
@@ -288,28 +403,58 @@ function renderTable(rows){
       });
   tb.querySelectorAll(".delBtn").forEach(b=>b.addEventListener("click",async e=>{await delLocal(Number(e.target.dataset.id)); refreshLocalTable();}));
   tb.querySelectorAll(".markBtn").forEach(b=>b.addEventListener("click",async e=>{
-    const id=Number(e.target.dataset.id); const row=(await byEvent()).find(x=>x.id===id); if(!row) return;
-    row.hadir=true; row.waktuHadir=new Date().toISOString(); await putLocal(row);
-    if(REMOTE_ENABLED) await remoteUpdate(row.gid,{hadir:true,waktuHadir:row.waktuHadir,nama:row.nama,nomor:row.nomor});
-    refreshLocalTable();
+    const id=Number(e.target.dataset.id); byEvent().then(async arr=>{
+      const row=arr.find(x=>x.id===id); if(!row) return;
+      row.hadir=true; row.waktuHadir=new Date().toISOString(); await putLocal(row);
+      if(REMOTE_ENABLED) await remoteUpdate(row.gid,{hadir:true,waktuHadir:row.waktuHadir,nama:row.nama,nomor:row.nomor});
+      refreshLocalTable();
+    });
   }));
 }
 async function refreshLocalTable(){ renderTable(await byEvent()); }
+
 async function syncFromRemote(){
-  if(!EVENT_ID){ document.getElementById("syncStatus").textContent="Belum login acara."; return; }
-  if(!REMOTE_ENABLED){ document.getElementById("syncStatus").textContent="Mode lokal (tanpa server)."; await refreshLocalTable(); return; }
+  if(!EVENT_ID){ document.getElementById("syncStatus").textContent="Belum login acara."; updateDiag(false,'No event'); return; }
+  if(!REMOTE_ENABLED){ document.getElementById("syncStatus").textContent="Mode lokal (tanpa server)."; updateDiag(false,'Local mode'); await refreshLocalTable(); return; }
+
   document.getElementById("syncStatus").textContent="Sinkronisasi…";
-  const remoteRows = await remoteGetAll();
-  // merge sederhana: tulis ulang lokal khusus EVENT_ID
-  const all = await allLocal();
-  for(const r of all.filter(x=>x.event===EVENT_ID)){ await delLocal(r.id); }
-  for(const r of remoteRows){
-    await addLocal({ id: undefined, event: EVENT_ID, event_gid: `${EVENT_ID}|${r.guest_id}`, waktu: r.waktu || new Date().toISOString(), gid: r.guest_id, nama: r.nama, nomor: r.nomor, hadir: !!r.hadir, waktuHadir: r.waktuHadir || null });
+  try{
+    const remoteRows = await remoteGetAll();
+    // replace lokal utk event ini
+    const all = await allLocal();
+    for(const r of all.filter(x=>x.event===EVENT_ID)){ await delLocal(r.id); }
+    for(const r of remoteRows){
+      await addLocal({
+        id: undefined,
+        event: EVENT_ID, event_gid: `${EVENT_ID}|${r.guest_id}`,
+        waktu: r.waktu || new Date().toISOString(),
+        gid: r.guest_id, nama: r.nama, nomor: r.nomor,
+        hadir: !!r.hadir, waktuHadir: r.waktuHadir || null
+      });
+    }
+    await refreshLocalTable();
+    LAST_SYNC_AT = Date.now();
+    document.getElementById("syncStatus").textContent = `Tersinkron (${remoteRows.length} entri).`;
+    updateDiag(true);
+  }catch(e){
+    document.getElementById("syncStatus").textContent = "Gagal sinkron: " + e.message;
+    updateDiag(false, 'Err: ' + e.message);
   }
-  await refreshLocalTable();
-  document.getElementById("syncStatus").textContent=`Tersinkron (${remoteRows.length} entri).`;
 }
-setInterval(()=>{ if(document.visibilityState==="visible" && EVENT_ID) syncFromRemote(); }, 7000);
+
+/* ================== Fast Polling ================== */
+let fastPollUntil = 0;
+function startFastPoll(seconds=30){ fastPollUntil = Date.now() + seconds*1000; }
+setInterval(()=> {
+  if(!EVENT_ID) return;
+  if(document.visibilityState !== 'visible') return;
+  const now = Date.now();
+  if(now <= fastPollUntil){
+    syncFromRemote(); // polling cepat sementara
+  } else {
+    syncFromRemote(); // normal interval 7 detik
+  }
+}, 7000);
 
 /* ================== Export & Clear ================== */
 function toCSV(rows){const H=["id","waktu","gid","nomor","nama","hadir","waktuHadir"];const E=v=>v==null?"":`"${String(v).replace(/"/g,'""')}"`;return[H.map(E).join(",")].concat(rows.map(r=>H.map(h=>E(r[h])).join(","))).join("\r\n");}
@@ -345,48 +490,94 @@ async function stopScan(){ scanning=false; if(rafId) cancelAnimationFrame(rafId)
 function mapMediaError(e){const n=e?.name||""; if(n==="NotAllowedError")return"Akses kamera ditolak."; if(n==="NotFoundError")return"Kamera tidak ditemukan."; if(n==="NotReadableError")return"Kamera dipakai app lain."; if(n==="OverconstrainedError")return"Constraint tidak cocok."; if(n==="SecurityError")return"Origin tidak aman."; return `Gagal akses kamera: ${n||e}`;}
 async function testCameraBasic(){ if(!IS_SECURE){alert("Bukan HTTPS/localhost");return;} try{const s=await navigator.mediaDevices.getUserMedia({video:true,audio:false}); s.getTracks().forEach(t=>t.stop()); alert("Kamera OK & izin diberikan.");}catch(e){alert("Gagal akses kamera: "+(e.name||e));} }
 
-/* ================== Auto-Save (ID-only) + Duplikat ================== */
-function parseScanned(raw){ return { gid: raw.trim() }; } // ID saja
+/* ================== Auto-Save (ID-only) + Kartu + Duplikat ================== */
 async function autoSaveFromScan(gid, nama="", nomor=""){
   if(!EVENT_ID) return;
-  // 1) cek server dulu supaya duplikat terdeteksi lintas device
-  let r = await remoteGetByGid(gid);
-  if (r && r.hadir) {
-    document.getElementById("lastResult").textContent = gid;
-    toast(`Duplikat: ${gid} sudah hadir ${r.waktuHadir? '('+new Date(r.waktuHadir).toLocaleTimeString()+')':''}`,"warn");
-    try{ soundDup.currentTime=0; soundDup.play().catch(()=>{});}catch{}
-    // update lokal agar sinkron
-    const loc = await findLocal(gid);
-    if(loc){ loc.hadir=true; loc.waktuHadir=r.waktuHadir||loc.waktuHadir; await putLocal(loc); }
-    await refreshLocalTable(); return;
-  }
-
   const nowISO = new Date().toISOString();
-  if (r && !r.hadir) {
-    await remoteUpdate(gid,{hadir:true,waktuHadir:nowISO});
-  } else if (!r) {
-    await remoteInsert({event_id:EVENT_ID, guest_id:gid, nama, nomor, hadir:true, waktu:nowISO, waktuHadir:nowISO});
+
+  // Ambil data tamu dari server (kalau ada)
+  let r;
+  try { r = await remoteGetByGid(gid); } catch(e){ toast("Cek GID gagal: "+e.message,"err"); return; }
+
+  const nameResolved  = (r && r.nama)  ? r.nama  : (nama || "");
+  const nomorResolved = (r && r.nomor) ? r.nomor : (nomor || "");
+
+  // ===== DUPLIKAT: sudah hadir =====
+  if (r && r.hadir) {
+    document.getElementById("lastResult").textContent = `${gid}${nameResolved? " • "+nameResolved : ""}`;
+    const loc = await findLocal(gid);
+    if (loc) {
+      if (nameResolved && !loc.nama)  loc.nama  = nameResolved;
+      if (nomorResolved && !loc.nomor) loc.nomor = nomorResolved;
+      loc.hadir = true;
+      loc.waktuHadir = r.waktuHadir || loc.waktuHadir;
+      await putLocal(loc);
+    } else {
+      await addLocal({
+        event: EVENT_ID, event_gid: `${EVENT_ID}|${gid}`,
+        waktu: r.waktu || nowISO, gid,
+        nama: nameResolved, nomor: nomorResolved,
+        hadir: true, waktuHadir: r.waktuHadir || nowISO
+      });
+    }
+    showScanCard({ gid, nama: nameResolved, nomor: nomorResolved, status: "DUPLIKAT" });
+    if (nameResolved)  document.getElementById("nama").value = nameResolved;
+    if (nomorResolved) document.getElementById("nomorTamu").value = nomorResolved;
+
+    try { soundDup.currentTime=0; soundDup.play().catch(()=>{}); } catch {}
+    await refreshLocalTable();
+    startFastPoll(20);     // percepat polling sebentar
+    return;
   }
 
-  // Lokal
-  const exists = await findLocal(gid);
-  if (exists) {
-    exists.hadir = true; exists.waktuHadir = nowISO;
-    if(nama && !exists.nama) exists.nama = nama;
-    if(nomor && !exists.nomor) exists.nomor = nomor;
-    await putLocal(exists);
+  // ===== BARU / BELUM HADIR =====
+  try{
+    if (r) {
+      await remoteUpdate(gid, {
+        hadir: true, waktuHadir: nowISO,
+        nama:  nameResolved || r.nama || null,
+        nomor: nomorResolved || r.nomor || null
+      });
+    } else {
+      await remoteInsert({
+        event_id: EVENT_ID, guest_id: gid,
+        nama: nameResolved, nomor: nomorResolved,
+        hadir: true, waktu: nowISO, waktuHadir: nowISO
+      });
+    }
+  }catch(e){
+    toast("Simpan ke server gagal: "+e.message,"err");
+    return;
+  }
+
+  // Lokal upsert
+  const loc = await findLocal(gid);
+  if (loc) {
+    if (nameResolved && !loc.nama)  loc.nama  = nameResolved;
+    if (nomorResolved && !loc.nomor) loc.nomor = nomorResolved;
+    loc.hadir = true; loc.waktuHadir = nowISO;
+    await putLocal(loc);
   } else {
-    await addLocal({ event:EVENT_ID, event_gid:`${EVENT_ID}|${gid}`, waktu:nowISO, gid, nama, nomor, hadir:true, waktuHadir:nowISO });
+    await addLocal({
+      event: EVENT_ID, event_gid: `${EVENT_ID}|${gid}`,
+      waktu: nowISO, gid,
+      nama: nameResolved, nomor: nomorResolved,
+      hadir: true, waktuHadir: nowISO
+    });
   }
 
-  document.getElementById("lastResult").textContent = gid;
-  toast("Tersimpan + Hadir.","ok");
-  try{ soundOK.currentTime=0; soundOK.play().catch(()=>{});}catch{}
+  document.getElementById("lastResult").textContent = `${gid}${nameResolved? " • "+nameResolved : ""}`;
+  showScanCard({ gid, nama: nameResolved, nomor: nomorResolved, status: "HADIR" });
+  if (nameResolved)  document.getElementById("nama").value = nameResolved;
+  if (nomorResolved) document.getElementById("nomorTamu").value = nomorResolved;
+
+  try { soundOK.currentTime=0; soundOK.play().catch(()=>{});} catch {}
   await refreshLocalTable();
+  startFastPoll(30);       // percepat polling setelah ada perubahan
 }
 function onScan(raw, auto=false){
   const gid = raw.trim();
-  document.getElementById("barcodeValue").value = gid; // prefill form manual
+  document.getElementById("barcodeValue").value = gid; // prefill
   if (auto) autoSaveFromScan(gid);
 }
 
@@ -399,14 +590,17 @@ async function handleSave(markPresent=false){
   const nomor=(document.getElementById("nomorTamu").value||"").trim();
   if(!gid){ setStatus("GID wajib diisi.",true); return; }
   const nowISO=new Date().toISOString();
-  let r=await remoteGetByGid(gid);
-  if(r){ await remoteUpdate(gid,{nama,nomor,hadir:markPresent, waktuHadir: markPresent ? nowISO : r.waktuHadir}); }
-  else { await remoteInsert({event_id:EVENT_ID, guest_id:gid, nama, nomor, hadir:markPresent, waktu:nowISO, waktuHadir: markPresent? nowISO:null}); }
+  try{
+    let r=await remoteGetByGid(gid);
+    if(r){ await remoteUpdate(gid,{nama,nomor,hadir:markPresent, waktuHadir: markPresent ? nowISO : r.waktuHadir}); }
+    else { await remoteInsert({event_id:EVENT_ID, guest_id:gid, nama, nomor, hadir:markPresent, waktu:nowISO, waktuHadir: markPresent? nowISO:null}); }
+  }catch(e){ setStatus("Server error: "+e.message,true); return; }
 
   const loc = await findLocal(gid);
   if(loc){ loc.nama=nama||loc.nama; loc.nomor=nomor||loc.nomor; if(markPresent){ loc.hadir=true; loc.waktuHadir=nowISO; } await putLocal(loc); }
   else { await addLocal({ event:EVENT_ID, event_gid:`${EVENT_ID}|${gid}`, waktu:nowISO, gid, nama, nomor, hadir:markPresent, waktuHadir: markPresent? nowISO:null }); }
   setStatus(markPresent?"Tersimpan + Hadir.":"Tersimpan."); refreshLocalTable();
+  startFastPoll(20);
 }
 
 /* ================== RSVP Generate (ID Only) ================== */
@@ -426,7 +620,7 @@ document.getElementById("rsvpForm").addEventListener("submit", async (e)=>{
   }
   const gidVal = gidInput || gid(8);
 
-  // buat QR: payload = GID saja (ID only)
+  // buat QR: payload = GID saja
   document.getElementById("qrContainer").innerHTML="";
   if (document.querySelector('input[name="qrtype"]:checked')?.value === "code128") {
     const svg=document.createElementNS("http://www.w3.org/2000/svg","svg"); document.getElementById("qrContainer").appendChild(svg);
@@ -443,18 +637,22 @@ document.getElementById("rsvpForm").addEventListener("submit", async (e)=>{
 
   // simpan draft ke server + lokal
   const nowISO = new Date().toISOString();
-  let r=await remoteGetByGid(gidVal);
-  if(!r) await remoteInsert({event_id:EVENT_ID, guest_id:gidVal, nama, nomor, hadir:false, waktu:nowISO, waktuHadir:null});
+  try{
+    let r=await remoteGetByGid(gidVal);
+    if(!r) await remoteInsert({event_id:EVENT_ID, guest_id:gidVal, nama, nomor, hadir:false, waktu:nowISO, waktuHadir:null});
+  }catch(e){ setRSVPStatus("Server error: "+e.message,true); return; }
   const loc = await findLocal(gidVal);
   if(!loc) await addLocal({ event:EVENT_ID, event_gid:`${EVENT_ID}|${gidVal}`, waktu:nowISO, gid:gidVal, nama, nomor, hadir:false, waktuHadir:null });
   await refreshLocalTable();
   setRSVPStatus("QR dibuat (ID only).");
+  startFastPoll(20);
 });
 function setRSVPStatus(msg,isErr=false){const el=document.getElementById("rsvpStatus"); el.textContent=msg; el.className="text-sm "+(isErr?"text-rose-600":"text-slate-500");}
 document.getElementById("downloadQrBtn").addEventListener("click",()=>{
   const cont=document.getElementById("qrContainer"); const img=cont.querySelector("img");
-  if(img){ const a=document.createElement("a"); a.href=img.src; a.download=`GID-${document.getElementById("gidBox").textContent}.png`; document.body.appendChild(a); a.click(); a.remove(); return; }
-  const svg=cont.querySelector("svg"); if(svg){ const xml=new XMLSerializer().serializeToString(svg); const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml); const a=document.createElement("a"); a.href=url; a.download=`GID-${document.getElementById("gidBox").textContent}.png`; document.body.appendChild(a); a.click(); a.remove(); }
+  const filename=`GID-${document.getElementById("gidBox").textContent}.png`;
+  if(img){ const a=document.createElement("a"); a.href=img.src; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); return; }
+  const svg=cont.querySelector("svg"); if(svg){ const xml=new XMLSerializer().serializeToString(svg); const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml); const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); }
 });
 
 /* ================== Bindings ================== */
@@ -474,11 +672,11 @@ document.getElementById("stopBtn").addEventListener("click", stopScan);
 document.getElementById("testCamBtn").addEventListener("click", testCameraBasic);
 
 /* ================== INIT ================== */
-(async function(){ db=await openDB(); await listCameras(); await refreshLocalTable(); if(EVENT_ID) await syncFromRemote(); })();
+(async function(){ db=await openDB(); await listCameras(); await refreshLocalTable(); if(EVENT_ID) await syncFromRemote(); updateDiag(true); })();
 
-/* ====== SQL Supabase (jalankan sekali di SQL Editor) =====================
+/* ====== SQL Supabase (jalankan sekali di SQL Editor) =============
 
--- Table daftar event + PIN (sederhana; untuk produksi pakai Supabase Auth & hash PIN)
+-- Table daftar event + PIN (demo; untuk produksi pakai Auth/hashed PIN)
 create table if not exists public.events (
   id text primary key,
   name text,
@@ -498,18 +696,18 @@ create table if not exists public.guests (
   unique(event_id, guest_id)
 );
 
--- RLS (demo: terbuka untuk anon key). Produksi: batasi sesuai kebutuhan.
 alter table public.events enable row level security;
 alter table public.guests enable row level security;
-create policy "read_events" on public.events for select using (true);
-create policy "read_guests" on public.guests for select using (true);
-create policy "ins_guests" on public.guests for insert with check (true);
-create policy "upd_guests" on public.guests for update using (true);
 
--- Tambahkan 1 baris event contoh:
--- insert into public.events(id, name, pin) values ('AYAT33-001','Wedding Ayat33','1234');
+create policy if not exists "read_events" on public.events for select using (true);
+create policy if not exists "read_guests" on public.guests for select using (true);
+create policy if not exists "ins_guests" on public.guests for insert with check (true);
+create policy if not exists "upd_guests" on public.guests for update using (true);
 
-========================================================================= */
+-- Contoh event:
+-- insert into public.events(id, name, pin) values ('AYAT33-001','Wedding Ayat & Nisa','2580');
+
+================================================================== */
 </script>
 </body>
 </html>
