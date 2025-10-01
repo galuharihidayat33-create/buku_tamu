@@ -71,8 +71,19 @@
       <article class="glass rounded-2xl shadow-glass p-4 md:p-6 animate-fade-up">
         <h2 class="font-display text-lg text-brand-800 mb-3">Scanner QR</h2>
         <div id="qr-reader" class="rounded-xl overflow-hidden ring-1 ring-slate-200"></div>
-        <p id=\"scanHint\"$1</p>
-        <p id=\"permWarn\" class=\"text-xs mt-2 text-red-600 hidden\"></p>
+        <div class="mt-3 flex flex-wrap gap-2 items-center">
+          <select id="cameraSelect" class="px-3 py-2 rounded-xl ring-1 ring-slate-200 text-sm"></select>
+          <button id="refreshCamBtn" class="px-3 py-2 rounded-xl ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50">Refresh Kamera</button>
+          <label for="fileScanInput" class="px-3 py-2 rounded-xl ring-1 ring-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer">Scan dari Gambar</label>
+          <input id="fileScanInput" type="file" accept="image/*" class="hidden" />
+        </div>
+        <div id="qr-file" class="hidden"></div>
+        <p id="scanHint" class="text-xs text-slate-500 mt-2">Format didukung: JSON (\{"name":"…","code":"…","event":"…"\}) atau teks dengan pemisah <span class="font-mono">EVT|NAMA|KODE</span>. Kode willcard lain akan diproses sebagai <span class="font-mono">code</span> saja.</p>
+        <p id="permWarn" class="text-xs mt-2 text-red-600 hidden"></p>
+        <details class="mt-2 text-xs text-slate-500">
+          <summary class="cursor-pointer select-none">Debug</summary>
+          <pre id="debugLog" class="mt-1 p-2 bg-slate-50 rounded-lg overflow-auto max-h-40"></pre>
+        </details>
       </article>
 
       <!-- Manual Entry Card -->
@@ -267,55 +278,65 @@
     // ----------------------------
     // Scanner Logic (html5-qrcode)
     // ----------------------------
-    let scanner = null; // Html5QrcodeScanner instance
+    let html5QrCode = null; // Html5Qrcode instance
     let scanning = false;
+    let currentCamId = null;
     let debounceText = '';
 
-    function startScanner(){
-      if (scanning) return;
-      scanning = true;
-      $('#qr-reader').innerHTML = '';
-      scanner = new Html5QrcodeScanner('qr-reader', {
-        fps: 10,
-        qrbox: { width: Math.min(320, Math.floor(window.innerWidth*0.8)), height: Math.min(320, Math.floor(window.innerWidth*0.8)) },
-        rememberLastUsedCamera: true,
-        showTorchButtonIfSupported: true,
-        showZoomSliderIfSupported: true,
-        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA, Html5QrcodeScanType.SCAN_TYPE_FILE],
-        experimentalFeatures: { useBarCodeDetectorIfSupported: true }
-      }, false);
-
-      scanner.render(onScanSuccess, onScanFailure);
+    async function listCameras(){
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cams = devices.filter(d => d.kind === 'videoinput');
+        const sel = document.getElementById('cameraSelect');
+        sel.innerHTML = '';
+        if (cams.length === 0){ throw new Error('Tidak ada perangkat kamera terdeteksi.'); }
+        // Prefer back camera
+        const prefer = (c) => /(back|rear|environment)/i.test(c.label);
+        const last = localStorage.getItem('guestbook_lastCamId');
+        cams.forEach((c, i) => {
+          const opt = document.createElement('option');
+          opt.value = c.deviceId; opt.textContent = c.label || `Kamera ${i+1}`;
+          sel.appendChild(opt);
+        });
+        let chosen = cams.find(prefer)?.deviceId || last || cams[0].deviceId;
+        sel.value = chosen; currentCamId = chosen;
+      } catch (e) { showPermWarning(e); logDebug(e); }
     }
 
-    function stopScanner(){
-      if (!scanning) return;
-      scanning = false;
-      try { scanner.clear(); } catch {}
-      $('#qr-reader').innerHTML = '<div class="p-4 text-sm text-slate-500">Scanner dihentikan.</div>';
+    async function startScanner(camId){
+      try{
+        if (scanning) await stopScanner();
+        html5QrCode = new Html5Qrcode('qr-reader', { verbose: false });
+        const size = Math.min(320, Math.floor(window.innerWidth * 0.8));
+        const config = { fps: 10, qrbox: { width: size, height: size }, aspectRatio: 1.0, experimentalFeatures: { useBarCodeDetectorIfSupported: true } };
+        const constraints = camId ? { deviceId: { exact: camId } } : { facingMode: { ideal: 'environment' } };
+        await html5QrCode.start(constraints, config, onScanSuccess, onScanFailure);
+        scanning = true; currentCamId = camId || currentCamId; if (currentCamId) localStorage.setItem('guestbook_lastCamId', currentCamId);
+      } catch(e){ showPermWarning(e); logDebug(e); }
+    }
+
+    async function stopScanner(){
+      try {
+        if (html5QrCode){ await html5QrCode.stop(); await html5QrCode.clear(); }
+      } catch(e){ logDebug(e); }
+      html5QrCode = null; scanning = false;
+      document.getElementById('qr-reader').innerHTML = '';
     }
 
     function onScanSuccess(decodedText){
       if (!decodedText) return;
-      // Debounce identical frames
-      if (decodedText === debounceText) return;
-      debounceText = decodedText;
-      setTimeout(()=>{ debounceText=''; }, 1200);
-
-      const beep = $('#beep'); try { beep.currentTime = 0; beep.play(); } catch {}
-
+      if (decodedText === debounceText) return; // debounce identical frames
+      debounceText = decodedText; setTimeout(()=>{ debounceText=''; }, 1200);
+      try { const beep = document.getElementById('beep'); if(beep){ beep.currentTime=0; beep.play(); } } catch{}
       const parsed = parseQR(decodedText);
-      // Pre-fill manual form for confirmation/edits
-      $('#m_name').value = parsed.name || '';
-      $('#m_code').value = parsed.code || '';
-      $('#m_qty').value = parsed.qty || 1;
-
-      // Auto-save
+      document.getElementById('m_name').value = parsed.name || '';
+      document.getElementById('m_code').value = parsed.code || '';
+      document.getElementById('m_qty').value = parsed.qty || 1;
       saveRecord(parsed.name, parsed.code, parsed.qty);
       flashToast(`Tersimpan: ${parsed.name||'-'} (${parsed.code||'-'})`);
     }
 
-    function onScanFailure(err){ /* ignore to keep scanner active */ }
+    function onScanFailure(err){ logDebug(err); }
 
     function parseQR(text){
       // Try JSON first
@@ -403,12 +424,20 @@
         persistMeta();
         try {
           await preflightCamera();
+          await listCameras();
+          await startScanner($('#cameraSelect').value);
+        } catch (e) {
+          showPermWarning(e);
+        }
+      });
+        try {
+          await preflightCamera();
           startScanner();
         } catch (e) {
           showPermWarning(e);
         }
       });
-      $('#stopScanBtn').addEventListener('click', stopScanner);
+      $('#stopScanBtn').addEventListener('click', () => { stopScanner(); });
 
       $('#saveManual').addEventListener('click', () => {
         saveRecord($('#m_name').value, $('#m_code').value, $('#m_qty').value);
@@ -425,6 +454,24 @@
 
       $('#genQrBtn').addEventListener('click', makeQR);
       $('#downloadQr').addEventListener('click', () => {});
+
+      // Camera UI listeners
+      $('#refreshCamBtn').addEventListener('click', async () => { try { await listCameras(); } catch(e){ showPermWarning(e); } });
+      $('#cameraSelect').addEventListener('change', async (e) => { try { await startScanner(e.target.value); } catch(err){ showPermWarning(err); } });
+
+      // File scan fallback
+      $('#fileScanInput').addEventListener('change', async (e) => {
+        const file = e.target.files?.[0]; if(!file) return;
+        try{
+          // Use a separate instance bound to hidden container
+          const fileQr = new Html5Qrcode('qr-file');
+          const text = await fileQr.scanFile(file, true);
+          await fileQr.clear();
+          onScanSuccess(text);
+          flashToast('QR dari gambar terbaca');
+        } catch(err){ showPermWarning(err); logDebug(err); }
+        finally { e.target.value = ''; }
+      });
 
       // Re-render on event/operator change
       ['#eventId','#operatorName','#station'].forEach(id => document.querySelector(id).addEventListener('change', ()=>{ persistMeta(); renderTable($('#searchInput').value.trim()); }))
@@ -453,13 +500,26 @@
       const msg = (err && err.message) ? err.message : String(err);
       if (el){
         el.classList.remove('hidden');
-        el.textContent = 'Kamera tidak bisa diakses: ' + msg + '. Coba: 1) Buka via HTTPS atau http://localhost, 2) Izinkan kamera di pengaturan browser (Site settings > Camera), 3) Pastikan kamera tidak sedang dipakai aplikasi lain.';
+        el.textContent = 'Kamera tidak bisa diakses: ' + msg + '. Coba: 1) Buka via HTTPS atau http://localhost, 2) Izinkan kamera di pengaturan browser (Site settings > Camera), 3) Pastikan kamera tidak sedang dipakai aplikasi lain, 4) Pilih kamera lain di dropdown.';
       } else {
         alert('Kamera tidak bisa diakses: ' + msg);
       }
-    
-      localStorage.setItem('guestbook_meta', JSON.stringify(meta));
+    }
+
+    function logDebug(msg){
+      try{
+        const pre = document.getElementById('debugLog');
+        if(!pre) return;
+        const line = `[${nowStr()}] ${ (msg && msg.message) ? msg.message : (typeof msg==='string'? msg : JSON.stringify(msg)) }
+`;
+        pre.textContent += line;
+      }catch{}
+    } else {
+        alert('Kamera tidak bisa diakses: ' + msg);
+      }
     };
+      localStorage.setItem('guestbook_meta', JSON.stringify(meta));
+    }
   </script>
 </body>
 </html>
