@@ -2,892 +2,427 @@
 <html lang="id">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Buku Tamu – QR Scanner (HP & PC)</title>
-  <!-- Tailwind CSS -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Buku Tamu Digital – QR (HP & PC)</title>
+  <!-- TailwindCSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- HTML5-QRcode -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { display: ['"Playfair Display"', 'serif'], body: ['Inter', 'system-ui', 'sans-serif'] },
+          colors: { brand: { 50: '#eef6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd', 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a' } },
+          boxShadow: { glass: '0 22px 70px rgba(22,40,80,.18)' },
+          keyframes: {
+            fadeUp: { '0%':{opacity:0, transform:'translateY(10px)'}, '100%':{opacity:1, transform:'translateY(0)'} },
+            pop: { '0%':{transform:'scale(.98)'}, '100%':{transform:'scale(1)'} }
+          },
+          animation: { 'fade-up': 'fadeUp .8s ease-out both', pop: 'pop .15s ease-out both' }
+        }
+      }
+    }
+  </script>
+  <!-- QR Scanner & Generator Libraries -->
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-  <!-- Supabase JS v2 (opsional; isi kredensial di bawah untuk mode Online) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <style>
-    html, body { height: 100%; }
-    .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(10px); }
+    /* Make iOS Safari fullscreen look nicer */
+    html, body { height: 100%; background: linear-gradient(180deg,#f8fafc,#eef6ff); }
+    .glass { background: rgba(255,255,255,.86); backdrop-filter: blur(10px); }
   </style>
-
-  <!-- \============================================================
-       SETUP DATABASE (SUPABASE) – OPSIONAL
-       -------------------------------------------------------------
-       1) Buat project di https://supabase.com
-       2) Aktifkan SQL berikut di Dashboard > SQL Editor sekali saja:
-
--- Enable extension untuk hashing PIN operator
-create extension if not exists pgcrypto;
-
--- Tabel acara (opsional, untuk mendata event)
-create table if not exists public.events (
-  code text primary key,
-  name text,
-  created_at timestamptz default now()
-);
-
--- Tabel operator (login manual: event_code + operator_id + PIN)
-create table if not exists public.operators (
-  id uuid primary key default gen_random_uuid(),
-  event_code text references public.events(code) on delete cascade,
-  operator_id text not null,
-  pin_hash text not null,
-  is_active boolean default true,
-  created_at timestamptz default now(),
-  unique(event_code, operator_id)
-);
-
--- Tabel tamu (opsional; untuk daftar undangan)
-create table if not exists public.guests (
-  id uuid primary key default gen_random_uuid(),
-  event_code text references public.events(code) on delete cascade,
-  guest_code text not null,
-  name text,
-  invited_count int,
-  created_at timestamptz default now(),
-  unique(event_code, guest_code)
-);
-
--- Tabel check-in (hasil scan)
-create table if not exists public.checkins (
-  id bigserial primary key,
-  event_code text not null,
-  guest_code text not null,
-  operator_id text,
-  device text,
-  raw_payload text,
-  created_at timestamptz default now(),
-  unique(event_code, guest_code)
-);
-
--- RLS: izinkan insert saja dari klien anonim (tanpa baca). Anda dapat menambah keamanan sesuai kebutuhan.
-alter table public.checkins enable row level security;
-create policy if not exists "insert_only_checkins" on public.checkins
-  for insert to anon with check (true);
-revoke all on table public.checkins from anon;
-grant insert on table public.checkins to anon;
-
--- (Opsional) Buat function untuk verifikasi login operator dengan PIN hash
-create or replace function public.login_operator(p_event text, p_operator text, p_pin text)
-returns table(event_code text, operator_id text) language plpgsql security definer as $$
-declare op record; begin
-  select * into op from public.operators o
-   where o.event_code = p_event and o.operator_id = p_operator and o.is_active = true
-   limit 1;
-  if not found then return; end if;
-  if crypt(p_pin, op.pin_hash) = op.pin_hash then
-    return query select op.event_code, op.operator_id;
-  end if;
-end; $$;
-grant execute on function public.login_operator(text,text,text) to anon;
-
--- Contoh memasukkan event & operator (PIN di-hash di DB)
-insert into public.events (code, name) values ('WEDD-2025-ANDIN-DAFA', 'Andini & Dafa') on conflict (code) do nothing;
-insert into public.operators (event_code, operator_id, pin_hash)
-values ('WEDD-2025-ANDIN-DAFA', 'OP01', crypt('1234', gen_salt('bf')))
-  on conflict(event_code, operator_id) do nothing;
-
-       3) Ambil SUPABASE_URL & anon key di Project Settings > API.
-          Masukkan pada konstanta SUPABASE_URL & SUPABASE_ANON_KEY di bawah.
-       4) Jika tidak diisi, aplikasi tetap bisa dipakai (Mode Lokal/CSV).
-      ============================================================= // -->
 </head>
-<body class="min-h-full bg-gradient-to-br from-sky-50 via-white to-indigo-50 text-slate-800">
-  <main class="max-w-5xl mx-auto p-4 md:p-6">
-    <header class="flex items-center justify-between mb-4 md:mb-6">
-      <h1 class="text-xl md:text-2xl font-semibold">📒 Buku Tamu – QR Scanner</h1>
-      <div class="flex items-center gap-2">
-        <button id="btn-export" class="px-3 py-2 rounded-lg border border-slate-200 hover:bg-white">Export CSV</button>
-        <button id="btn-reset" class="px-3 py-2 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50">Reset App</button>
+<body class="font-body text-slate-700">
+  <main class="min-h-screen max-w-5xl mx-auto px-4 py-6 md:py-10">
+    <!-- Header -->
+    <header class="flex items-center justify-between gap-3 mb-5 md:mb-8">
+      <div>
+        <h1 class="font-display text-2xl md:text-3xl text-brand-800">Buku Tamu Digital</h1>
+        <p class="text-sm text-slate-500">Scan QR • Mobile & Desktop • Ekspor CSV</p>
       </div>
+      <a href="#panduan" class="text-brand-700 hover:underline text-sm">Panduan</a>
     </header>
 
-    <!-- Kartu Login / Konteks Event & Operator -->
-    <section id="login-card" class="glass rounded-2xl p-4 md:p-6 shadow mb-4 md:mb-6">
-      <h2 class="text-lg font-semibold mb-3">Login Operator</h2>
+    <!-- Top Controls -->
+    <section class="glass rounded-2xl shadow-glass p-4 md:p-6 mb-6 animate-fade-up">
       <div class="grid md:grid-cols-4 gap-3">
-        <div>
-          <label class="block text-sm mb-1">Kode Event</label>
-          <input id="in-event" type="text" placeholder="WEDD-2025-ANDIN-DAFA" class="w-full border rounded-lg px-3 py-2" />
-        </div>
-        <div>
-          <label class="block text-sm mb-1">ID Operator</label>
-          <input id="in-operator" type="text" placeholder="OP01" class="w-full border rounded-lg px-3 py-2" />
-        </div>
-        <div>
-          <label class="block text-sm mb-1">PIN (4–8 digit)</label>
-          <input id="in-pin" type="password" inputmode="numeric" class="w-full border rounded-lg px-3 py-2" />
-        </div>
+        <label class="block">
+          <span class="text-xs text-slate-500">ID Acara</span>
+          <input id="eventId" class="w-full mt-1 px-3 py-2 rounded-xl ring-1 ring-slate-200 focus:ring-brand-400 outline-none" placeholder="cth: WEDD-2025-ANDIN-DAFA" />
+        </label>
+        <label class="block">
+          <span class="text-xs text-slate-500">Nama Operator</span>
+          <input id="operatorName" class="w-full mt-1 px-3 py-2 rounded-xl ring-1 ring-slate-200 focus:ring-brand-400 outline-none" placeholder="cth: Resepsionis 1" />
+        </label>
+        <label class="block">
+          <span class="text-xs text-slate-500">Lokasi/Meja (opsional)</span>
+          <input id="station" class="w-full mt-1 px-3 py-2 rounded-xl ring-1 ring-slate-200 focus:ring-brand-400 outline-none" placeholder="cth: Meja A" />
+        </label>
         <div class="flex items-end gap-2">
-          <button id="btn-login" class="w-full px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">Masuk</button>
+          <button id="startScanBtn" class="flex-1 px-4 py-2 rounded-xl bg-brand-600 text-white hover:bg-brand-700 active:scale-[.99]">Mulai Scan</button>
+          <button id="stopScanBtn" class="px-4 py-2 rounded-xl ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50">Stop</button>
         </div>
       </div>
-      <p id="login-hint" class="text-xs text-slate-500 mt-2">Catatan: Jika Supabase tidak dikonfigurasi, login hanya menyimpan identitas secara lokal (tanpa verifikasi PIN di server).</p>
-      <p id="login-status" class="text-sm mt-2 font-medium"></p>
+      <p class="mt-2 text-xs text-slate-500">Tips: Gunakan <span class="font-medium">kamera belakang</span> di HP. Di desktop, izinkan akses kamera. HTTPS diperlukan untuk akses kamera di sebagian besar browser.</p>
     </section>
 
-    <!-- Panel Status & Kendali Scanner -->
-    <section id="panel" class="hidden glass rounded-2xl p-4 md:p-6 shadow mb-4 md:mb-6">
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div class="text-sm text-slate-600">Event</div>
-          <div id="lab-event" class="font-semibold">-</div>
-        </div>
-        <div>
-          <div class="text-sm text-slate-600">Operator</div>
-          <div id="lab-operator" class="font-semibold">-</div>
-        </div>
-        <div class="flex gap-2">
-          <button id="btn-switch" class="px-3 py-2 rounded-lg border hover:bg-white">Ganti Kamera</button>
-          <button id="btn-torch" class="px-3 py-2 rounded-lg border hover:bg-white">Senter</button>
-          <button id="btn-pause" class="px-3 py-2 rounded-lg border hover:bg-white">Pause</button>
-          <label class="px-3 py-2 rounded-lg border hover:bg-white cursor-pointer">
-            Upload QR
-            <input id="file-scan" type="file" accept="image/*" class="hidden" />
+    <!-- Scanner + Manual Entry -->
+    <section class="grid md:grid-cols-2 gap-6">
+      <!-- Scanner Card -->
+      <article class="glass rounded-2xl shadow-glass p-4 md:p-6 animate-fade-up">
+        <h2 class="font-display text-lg text-brand-800 mb-3">Scanner QR</h2>
+        <div id="qr-reader" class="rounded-xl overflow-hidden ring-1 ring-slate-200"></div>
+        <p id="scanHint" class="text-xs text-slate-500 mt-2">Format didukung: JSON (\{"name":"…","code":"…","event":"…"\}) atau teks dengan pemisah <span class="font-mono">EVT|NAMA|KODE</span>. Kode willcard lain akan diproses sebagai <span class="font-mono">code</span> saja.</p>
+      </article>
+
+      <!-- Manual Entry Card -->
+      <article class="glass rounded-2xl shadow-glass p-4 md:p-6 animate-fade-up">
+        <h2 class="font-display text-lg text-brand-800 mb-3">Input Manual / Koreksi</h2>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block col-span-2">
+            <span class="text-xs text-slate-500">Nama Tamu</span>
+            <input id="m_name" class="w-full mt-1 px-3 py-2 rounded-xl ring-1 ring-slate-200 focus:ring-brand-400 outline-none" placeholder="cth: Bpk/Ibu Ahmad" />
+          </label>
+          <label class="block">
+            <span class="text-xs text-slate-500">Kode Tiket / QR</span>
+            <input id="m_code" class="w-full mt-1 px-3 py-2 rounded-xl ring-1 ring-slate-200 focus:ring-brand-400 outline-none" placeholder="cth: INV-0001" />
+          </label>
+          <label class="block">
+            <span class="text-xs text-slate-500">Jumlah Tamu</span>
+            <input id="m_qty" type="number" min="1" value="1" class="w-full mt-1 px-3 py-2 rounded-xl ring-1 ring-slate-200 focus:ring-brand-400 outline-none" />
           </label>
         </div>
+        <div class="mt-3 flex gap-2">
+          <button id="saveManual" class="px-4 py-2 rounded-xl bg-brand-600 text-white hover:bg-brand-700">Simpan</button>
+          <button id="clearManual" class="px-4 py-2 rounded-xl ring-1 ring-slate-200 text-slate-600">Bersihkan</button>
+        </div>
+        <p class="text-xs text-slate-500 mt-2">Gunakan jika QR sulit terbaca atau perlu mengubah data hasil scan.</p>
+      </article>
+    </section>
+
+    <!-- Stats + Actions -->
+    <section class="grid md:grid-cols-3 gap-6 mt-6">
+      <div class="glass rounded-2xl shadow-glass p-4 md:p-6 animate-fade-up">
+        <div class="text-sm text-slate-500">Total Check-in</div>
+        <div id="statTotal" class="text-3xl font-display text-brand-800">0</div>
+        <div id="statLast" class="text-xs text-slate-500 mt-1">Terakhir: —</div>
       </div>
-      <div class="grid md:grid-cols-3 gap-3 mt-4">
-        <div class="p-3 rounded-xl border bg-white">
-          <div class="text-xs text-slate-500">Total Scan (unik)</div>
-          <div id="stat-total" class="text-2xl font-bold">0</div>
-        </div>
-        <div class="p-3 rounded-xl border bg-white">
-          <div class="text-xs text-slate-500">Pending Upload (offline/ gagal)</div>
-          <div id="stat-pending" class="text-2xl font-bold">0</div>
-        </div>
-        <div class="p-3 rounded-xl border bg-white">
-          <div class="text-xs text-slate-500">Terakhir</div>
-          <div id="stat-last" class="text-sm font-medium truncate">-</div>
-        </div>
+      <div class="glass rounded-2xl shadow-glass p-4 md:p-6 animate-fade-up">
+        <div class="text-sm text-slate-500">Filter Pencarian</div>
+        <input id="searchInput" class="w-full mt-2 px-3 py-2 rounded-xl ring-1 ring-slate-200 focus:ring-brand-400 outline-none" placeholder="Cari nama/kode…" />
+        <p class="text-xs text-slate-500 mt-1">Tekan <span class="font-mono">Enter</span> untuk menerapkan.</p>
+      </div>
+      <div class="glass rounded-2xl shadow-glass p-4 md:p-6 flex flex-wrap gap-2 items-end animate-fade-up">
+        <button id="exportCsv" class="px-4 py-2 rounded-xl bg-brand-600 text-white hover:bg-brand-700">Ekspor CSV</button>
+        <button id="resetData" class="px-4 py-2 rounded-xl ring-1 ring-red-200 text-red-600 hover:bg-red-50">Bersihkan Data (Event Ini)</button>
       </div>
     </section>
 
-    <!-- Area Scanner -->
-    <section id="scanner-card" class="hidden glass rounded-2xl p-4 md:p-6 shadow mb-4 md:mb-6">
-      <div id="reader" class="w-full"></div>
-      <p class="text-xs text-slate-500 mt-2">Tips: Dekatkan QR, jaga pencahayaan. Di PC/Laptop gunakan webcam eksternal jika perlu.</p>
-    </section>
-
-    <!-- Input Manual (fallback) -->
-    <section id="manual-card" class="hidden glass rounded-2xl p-4 md:p-6 shadow">
-      <h3 class="font-semibold mb-2">Input Manual (jika QR rusak)</h3>
-      <div class="flex gap-2">
-        <input id="in-manual" type="text" placeholder="GUEST-0001 atau payload JSON" class="flex-1 border rounded-lg px-3 py-2" />
-        <button id="btn-manual" class="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Simpan</button>
-      </div>
-    </section>
-
-    <!-- Toast -->
-    <div id="toast" class="fixed right-3 top-3 hidden"></div>
-      
-    <!-- Daftar Check-in (tampil di bawah scanner) -->
-    <section id="list-card" class="hidden glass rounded-2xl p-4 md:p-6 shadow mb-4 md:mb-6">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-lg font-semibold">Daftar Check‑in</h3>
-        <div class="flex items-center gap-2">
-          <button id="btn-refresh-list" class="px-3 py-2 rounded-lg border hover:bg-white">Refresh</button>
-          <button id="btn-auto-list" class="px-3 py-2 rounded-lg border hover:bg-white">Auto‑refresh: OFF</button>
-        </div>
-      </div>
-      <div class="overflow-x-auto border rounded-xl bg-white">
+    <!-- Table -->
+    <section class="glass rounded-2xl shadow-glass p-2 md:p-4 mt-6 animate-fade-up">
+      <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
-          <thead class="bg-slate-50 text-slate-600">
-            <tr>
-              <th class="px-3 py-2 text-left">#</th>
-              <th class="px-3 py-2 text-left">Guest Code</th>
-              <th class="px-3 py-2 text-left">Nama (jika ada)</th>
-              <th class="px-3 py-2 text-left">Operator</th>
-              <th class="px-3 py-2 text-left">Waktu</th>
-              <th class="px-3 py-2 text-left">Device</th>
+          <thead>
+            <tr class="bg-slate-50">
+              <th class="text-left px-3 py-2">#</th>
+              <th class="text-left px-3 py-2">Waktu</th>
+              <th class="text-left px-3 py-2">Nama</th>
+              <th class="text-left px-3 py-2">Kode</th>
+              <th class="text-left px-3 py-2">Jumlah</th>
+              <th class="text-left px-3 py-2">Operator</th>
+              <th class="text-left px-3 py-2">Lokasi</th>
             </tr>
           </thead>
-          <tbody id="list-body" class="divide-y"></tbody>
+          <tbody id="rows"></tbody>
         </table>
       </div>
-      <p id="list-hint" class="text-xs text-slate-500 mt-2">Jika backend Cloudflare aktif & login sukses, data di sini diambil dari database (real‑time refresh). Jika tidak, akan tampilkan riwayat lokal sementara.</p>
     </section>
 
+    <!-- QR Generator -->
+    <section class="glass rounded-2xl shadow-glass p-4 md:p-6 mt-6 animate-fade-up">
+      <h2 class="font-display text-lg text-brand-800 mb-3">Generator QR (untuk undangan/gelang)</h2>
+      <div class="grid md:grid-cols-5 gap-3 items-end">
+        <label class="block md:col-span-2">
+          <span class="text-xs text-slate-500">Nama Tamu</span>
+          <input id="g_name" class="w-full mt-1 px-3 py-2 rounded-xl ring-1 ring-slate-200 focus:ring-brand-400 outline-none" placeholder="cth: Ibu Sari" />
+        </label>
+        <label class="block">
+          <span class="text-xs text-slate-500">Kode</span>
+          <input id="g_code" class="w-full mt-1 px-3 py-2 rounded-xl ring-1 ring-slate-200 focus:ring-brand-400 outline-none" placeholder="cth: INV-0029" />
+        </label>
+        <label class="block">
+          <span class="text-xs text-slate-500">ID Acara</span>
+          <input id="g_event" class="w-full mt-1 px-3 py-2 rounded-xl ring-1 ring-slate-200 focus:ring-brand-400 outline-none" placeholder="cth: WEDD-2025-…" />
+        </label>
+        <div class="block">
+          <span class="text-xs text-slate-500">Format</span>
+          <select id="g_format" class="w-full mt-1 px-3 py-2 rounded-xl ring-1 ring-slate-200 focus:ring-brand-400 outline-none">
+            <option value="pipe">EVT|NAMA|KODE</option>
+            <option value="json">JSON {name,code,event}</option>
+          </select>
+        </div>
+      </div>
+      <div class="mt-3 flex gap-2 items-center">
+        <button id="genQrBtn" class="px-4 py-2 rounded-xl bg-brand-600 text-white hover:bg-brand-700">Buat QR</button>
+        <a id="downloadQr" class="hidden px-4 py-2 rounded-xl ring-1 ring-slate-200 text-slate-600" download>Unduh PNG</a>
+      </div>
+      <canvas id="qrCanvas" class="mt-4 hidden bg-white rounded-xl p-3"></canvas>
+      <p class="text-xs text-slate-500 mt-2">Tempelkan QR pada undangan/gelang. Disarankan ukuran minimal 2.5 cm untuk hasil scan stabil.</p>
+    </section>
+
+    <!-- Panduan Ringkas -->
+    <section id="panduan" class="mt-10">
+      <h2 class="font-display text-lg text-brand-800 mb-2">Panduan Singkat</h2>
+      <ol class="list-decimal pl-5 text-sm space-y-1 text-slate-600">
+        <li>Isi <b>ID Acara</b>, <b>Nama Operator</b>, dan (opsional) <b>Lokasi/Meja</b>.</li>
+        <li>Klik <b>Mulai Scan</b> lalu izinkan akses kamera. Arahkan ke QR tamu.</li>
+        <li>Jika berhasil, data tampil otomatis dan tersimpan <i>local</i> di perangkat (persisten). Gunakan <b>Input Manual</b> bila perlu.</li>
+        <li>Gunakan <b>Ekspor CSV</b> untuk rekap ke Excel/Google Sheets.</li>
+        <li>Gunakan <b>Generator QR</b> untuk membuat QR bagi undangan.</li>
+      </ol>
+      <p class="text-xs text-slate-500 mt-2">Catatan: Versi ini <u>tanpa server</u>. Jika butuh sinkron multi-perangkat realtime, saya bisa bantu upgrade ke backend (mis. Supabase/Cloudflare D1) tanpa ubah UI.</p>
+    </section>
   </main>
 
-<script>
-// ==========================
-// KONFIGURASI SUPABASE
-// ==========================
-const SUPABASE_URL = "YOUR_SUPABASE_URL"; // contoh: https://abcxyz.supabase.co
-const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY"; // isi anon key
-let supabaseClient = null;
-let ONLINE_MODE = false;
+  <!-- Tiny beep as Base64 (no external files) -->
+  <audio id="beep" preload="auto" class="hidden">
+    <source src="data:audio/wav;base64,UklGRoQAAABXQVZFZm10IBIAAAABAAEAESsAACJWAAACABYBHG1hZGUgd2l0aCBhdWRpb3JlYWN0b3IAAABJTEBBAAAAPwAAAP//f39/AAAAAP//f39/AAAAAP//f39/AAAAAP//f39/AAAAAP//f39/AAAA" type="audio/wav">
+  </audio>
 
-if (typeof window.supabase !== 'undefined' && SUPABASE_URL.startsWith('http') && SUPABASE_ANON_KEY.length > 10) {
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false }
-  });
-  ONLINE_MODE = true;
-}
+  <script>
+    // ----------------------------
+    // Simple Local DB (per Event)
+    // ----------------------------
+    const DB_KEY = 'guestbook_v1';
+    const $ = (sel) => document.querySelector(sel);
+    const pad2 = (n) => String(n).padStart(2,'0');
+    const nowStr = () => { const d=new Date(); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}` };
 
-// ==========================
-// STATE & UTIL
-// ==========================
-const el = (id) => document.getElementById(id);
-const $toast = el('toast');
-const beep = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABYAAAACAAACaW5mbyBiaXQ='); // very tiny beep (placeholder)
+    function loadDB(){ try { return JSON.parse(localStorage.getItem(DB_KEY)||'{}'); } catch { return {}; } }
+    function saveDB(db){ localStorage.setItem(DB_KEY, JSON.stringify(db)); }
 
-const state = {
-  logged: false,
-  eventCode: '',
-  operatorId: '',
-  pin: '',
-  lastPayload: null,
-  lastAt: 0,
-  cameras: [],
-  cameraIndex: 0,
-  scanning: false,
-  pending: JSON.parse(localStorage.getItem('bt_pending') || '[]'),
-  scannedSet: new Set(JSON.parse(localStorage.getItem('bt_scanned_keys') || '[]'))
-};
+    function getEventId(){ return $('#eventId').value.trim() || 'DEFAULT'; }
 
-function saveLocal() {
-  localStorage.setItem('bt_pending', JSON.stringify(state.pending));
-  localStorage.setItem('bt_scanned_keys', JSON.stringify([...state.scannedSet]));
-}
+    function pushRow(rec){
+      const db = loadDB();
+      const eid = getEventId();
+      db[eid] ||= [];
+      db[eid].push(rec);
+      saveDB(db);
+    }
 
-function showToast(msg, type='info') {
-  $toast.innerHTML = `<div class="px-4 py-2 rounded-lg shadow text-sm ${type==='ok'?'bg-emerald-600 text-white': type==='err'?'bg-rose-600 text-white':'bg-slate-800 text-white'}">${msg}</div>`;
-  $toast.classList.remove('hidden');
-  setTimeout(()=> $toast.classList.add('hidden'), 1800);
-}
+    function getRows(){ const db=loadDB(); return db[getEventId()] || []; }
+    function clearEvent(){ const db=loadDB(); delete db[getEventId()]; saveDB(db); }
 
-function updateStats() {
-  el('stat-total').textContent = state.scannedSet.size;
-  el('stat-pending').textContent = state.pending.length;
-}
+    // ----------------------------
+    // UI Rendering
+    // ----------------------------
+    function renderTable(filter=''){
+      const rows = getRows();
+      const tbody = $('#rows');
+      tbody.innerHTML = '';
+      const f = filter.toLowerCase();
+      rows
+        .map((r, i) => ({...r, _i: i+1}))
+        .filter(r => !f || `${r.name} ${r.code}`.toLowerCase().includes(f))
+        .forEach(r => {
+          const tr = document.createElement('tr');
+          tr.className = 'border-b border-slate-100 hover:bg-slate-50';
+          tr.innerHTML = `
+            <td class="px-3 py-2">${r._i}</td>
+            <td class="px-3 py-2 whitespace-nowrap">${r.ts}</td>
+            <td class="px-3 py-2">${escapeHtml(r.name)}</td>
+            <td class="px-3 py-2 font-mono">${escapeHtml(r.code)}</td>
+            <td class="px-3 py-2">${r.qty||1}</td>
+            <td class="px-3 py-2">${escapeHtml(r.operator||'')}</td>
+            <td class="px-3 py-2">${escapeHtml(r.station||'')}</td>`;
+          tbody.appendChild(tr);
+        });
+      $('#statTotal').textContent = rows.length;
+      $('#statLast').textContent = rows.length ? `Terakhir: ${rows[rows.length-1].ts}` : 'Terakhir: —';
+    }
 
-function setLast(text) {
-  el('stat-last').textContent = text;
-}
+    function escapeHtml(s){
+      return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]));
+    }
 
-// ==========================
-// LOGIN (opsional verifikasi via RPC)
-// ==========================
-async function login() {
-  const evt = el('in-event').value.trim();
-  const op = el('in-operator').value.trim();
-  const pin = el('in-pin').value.trim();
+    // ----------------------------
+    // CSV Export
+    // ----------------------------
+    function exportCSV(){
+      const eid = getEventId();
+      const rows = getRows();
+      const headers = ['EventID','Timestamp','Name','Code','Qty','Operator','Station'];
+      const csv = [headers.join(',')].concat(
+        rows.map(r => [eid, r.ts, r.name, r.code, r.qty||1, r.operator||'', r.station||'']
+          .map(v => `"${String(v).replaceAll('"','""')}"`).join(','))
+      ).join('\n');
+      const blob = new Blob(["\ufeff" + csv], {type: 'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `guestbook_${eid}_${Date.now()}.csv`; a.click();
+      URL.revokeObjectURL(url);
+    }
 
-  if (!evt || !op) { showToast('Isi Kode Event dan ID Operator', 'err'); return; }
+    // ----------------------------
+    // Scanner Logic (html5-qrcode)
+    // ----------------------------
+    let scanner = null; // Html5QrcodeScanner instance
+    let scanning = false;
+    let debounceText = '';
 
-  if (ONLINE_MODE && pin) {
-    try {
-      const { data, error } = await supabaseClient.rpc('login_operator', { p_event: evt, p_operator: op, p_pin: pin });
-      if (error) throw error;
-      if (!data || data.length === 0) {
-        el('login-status').textContent = 'PIN salah atau operator tidak aktif (server).';
-        el('login-status').className = 'text-sm mt-2 font-medium text-rose-600';
-        return;
+    function startScanner(){
+      if (scanning) return;
+      scanning = true;
+      $('#qr-reader').innerHTML = '';
+      scanner = new Html5QrcodeScanner('qr-reader', {
+        fps: 10,
+        qrbox: { width: Math.min(280, Math.floor(window.innerWidth*0.7)), height: Math.min(280, Math.floor(window.innerWidth*0.7)) },
+        rememberLastUsedCamera: true,
+        showTorchButtonIfSupported: true,
+        showZoomSliderIfSupported: true
+      }, false);
+
+      scanner.render(onScanSuccess, onScanFailure);
+    }
+
+    function stopScanner(){
+      if (!scanning) return;
+      scanning = false;
+      try { scanner.clear(); } catch {}
+      $('#qr-reader').innerHTML = '<div class="p-4 text-sm text-slate-500">Scanner dihentikan.</div>';
+    }
+
+    function onScanSuccess(decodedText){
+      if (!decodedText) return;
+      // Debounce identical frames
+      if (decodedText === debounceText) return;
+      debounceText = decodedText;
+      setTimeout(()=>{ debounceText=''; }, 1200);
+
+      const beep = $('#beep'); try { beep.currentTime = 0; beep.play(); } catch {}
+
+      const parsed = parseQR(decodedText);
+      // Pre-fill manual form for confirmation/edits
+      $('#m_name').value = parsed.name || '';
+      $('#m_code').value = parsed.code || '';
+      $('#m_qty').value = parsed.qty || 1;
+
+      // Auto-save
+      saveRecord(parsed.name, parsed.code, parsed.qty);
+      flashToast(`Tersimpan: ${parsed.name||'-'} (${parsed.code||'-'})`);
+    }
+
+    function onScanFailure(err){ /* ignore to keep scanner active */ }
+
+    function parseQR(text){
+      // Try JSON first
+      try {
+        const obj = JSON.parse(text);
+        return {
+          name: obj.name || obj.nama || '',
+          code: obj.code || obj.kode || obj.id || '',
+          qty: Number(obj.qty || obj.jumlah || 1)
+        }
+      } catch {}
+      // Try pipe format EVT|NAMA|KODE|QTY?
+      if (text.includes('|')){
+        const [evt, nama, kode, qty] = text.split('|');
+        // If event present and != current, still accept but keep current event id
+        return { name: nama||'', code: kode||text, qty: Number(qty||1) };
       }
-    } catch (e) {
-      console.error(e);
-      el('login-status').textContent = 'Gagal verifikasi ke server, lanjutkan Mode Lokal.';
-      el('login-status').className = 'text-sm mt-2 font-medium text-amber-600';
+      // Fallback: whole text as code
+      return { name: '', code: text, qty: 1 };
     }
-  }
 
-  state.logged = true; state.eventCode = evt; state.operatorId = op; state.pin = pin;
-  localStorage.setItem('bt_session', JSON.stringify({evt, op}));
+    function saveRecord(name, code, qty){
+      const rec = {
+        ts: nowStr(),
+        name: name?.trim() || '(Tanpa Nama)',
+        code: code?.trim() || '-',
+        qty: Number(qty||1),
+        operator: $('#operatorName').value.trim(),
+        station: $('#station').value.trim()
+      };
 
-  el('lab-event').textContent = evt;
-  el('lab-operator').textContent = op;
-  el('panel').classList.remove('hidden');
-  el('scanner-card').classList.remove('hidden');
-  el('manual-card').classList.remove('hidden');
-  el('login-card').classList.add('hidden');
+      // Duplicate prevention by code+event (optional)
+      const rows = getRows();
+      const eid = getEventId();
+      const dupIndex = rows.findIndex(r => r.code && r.code === rec.code);
+      if (dupIndex !== -1 && rec.code !== '-'){
+        flashToast(`Duplikat: kode ${rec.code} sudah tercatat (#${dupIndex+1})`, true);
+      }
 
-  startScanner();
-}
-
-// Auto-restore session
-(function restore() {
-  const s = localStorage.getItem('bt_session');
-  if (s) {
-    try { const {evt, op} = JSON.parse(s); el('in-event').value = evt; el('in-operator').value = op; } catch {}
-  }
-  updateStats();
-})();
-
-// ==========================
-// SCANNER
-// ==========================
-let html5Qr = null; let currentCameraId = null; let torchOn = false;
-
-async function startScanner() {
-  if (html5Qr) { try { await html5Qr.stop(); } catch {} }
-  html5Qr = new Html5Qrcode('reader');
-  state.cameras = await Html5Qrcode.getCameras();
-  if (!state.cameras || state.cameras.length === 0) {
-    showToast('Kamera tidak ditemukan. Coba Upload QR.', 'err');
-    return;
-  }
-  state.cameraIndex = Math.min(state.cameraIndex, state.cameras.length - 1);
-  currentCameraId = state.cameras[state.cameraIndex].id;
-
-  const config = { fps: 10, qrbox: 240, rememberLastUsedCamera: true, aspectRatio: 1.0, experimentalFeatures: { useBarCodeDetectorIfSupported: true } };
-
-  html5Qr.start(
-    { deviceId: { exact: currentCameraId } },
-    config,
-    onScanSuccess,
-    (err) => {} // onScanFailure (dibiarkan)
-  ).then(()=> { state.scanning = true; }).catch((e)=> {
-    console.error(e); showToast('Gagal memulai kamera', 'err');
-  });
-}
-
-async function switchCamera() {
-  if (!state.cameras || state.cameras.length < 2) { showToast('Hanya ada 1 kamera', 'info'); return; }
-  state.cameraIndex = (state.cameraIndex + 1) % state.cameras.length;
-  await startScanner();
-}
-
-async function togglePause() {
-  if (!html5Qr) return;
-  if (state.scanning) { await html5Qr.pause(true); state.scanning = false; el('btn-pause').textContent = 'Resume'; }
-  else { await html5Qr.resume(); state.scanning = true; el('btn-pause').textContent = 'Pause'; }
-}
-
-async function toggleTorch() {
-  try {
-    const track = html5Qr.getState() === Html5QrcodeScannerState.SCANNING ? html5Qr.getRunningTrackCameraCapabilities() : null;
-  } catch {}
-  // Fallback: apply constraints (jika didukung)
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: currentCameraId }}});
-    const videoTrack = stream.getVideoTracks()[0];
-    const capabilities = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
-    if (!('torch' in capabilities)) { showToast('Senter tidak didukung perangkat', 'info'); return; }
-    torchOn = !torchOn;
-    await videoTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
-    showToast(torchOn ? 'Senter ON' : 'Senter OFF', 'info');
-    // segera hentikan stream sementara agar tidak bentrok
-    setTimeout(()=> videoTrack.stop(), 500);
-  } catch (e) {
-    console.warn('Torch unsupported', e); showToast('Senter tidak didukung', 'info');
-  }
-}
-
-// ==========================
-// PARSE & SIMPAN
-// ==========================
-function normalizePayload(text) {
-  // Menerima 3 format umum:
-  // 1) JSON: {"event":"WEDD-...","guest":"GUEST-0001","name":"..."}
-  // 2) Pipe: EVENT|GUEST|NAME
-  // 3) Plain: GUEST-0001 (event diambil dari login)
-  let event = state.eventCode, guest = null, name = null, raw = text.trim();
-  try {
-    if (raw.startsWith('{')) {
-      const obj = JSON.parse(raw);
-      event = obj.event || event; guest = obj.guest || obj.code || null; name = obj.name || null;
-    } else if (raw.includes('|')) {
-      const [e, g, n] = raw.split('|');
-      event = (e || event).trim(); guest = (g || '').trim(); name = (n || '').trim();
-    } else {
-      guest = raw;
+      pushRow(rec);
+      renderTable($('#searchInput').value.trim());
     }
-  } catch { guest = raw; }
-  // Sanitasi ringkas
-  if (guest) guest = guest.replace(/\s+/g, '').toUpperCase();
-  if (event) event = event.trim();
-  return { event, guest, name, raw };
-}
 
-let dedupeWindowMs = 2000; // abaikan scan yang sama dalam 2 detik
-
-async function handleScanText(text) {
-  const now = Date.now();
-  if (state.lastPayload === text && (now - state.lastAt) < dedupeWindowMs) return; // debounced
-  state.lastPayload = text; state.lastAt = now;
-
-  const { event, guest, name, raw } = normalizePayload(text);
-  if (!guest) { showToast('QR tidak valid (guest kosong)', 'err'); return; }
-
-  const key = `${event}|${guest}`;
-  if (state.scannedSet.has(key)) {
-    showToast('Duplikat – sudah tercatat', 'info');
-    setLast(`${guest} (duplikat)`);
-    return;
-  }
-
-  // Masukkan ke DB atau queue
-  const row = { event_code: event, guest_code: guest, operator_id: state.operatorId, device: navigator.userAgent.slice(0,120), raw_payload: raw };
-  let ok = false; let errMsg = '';
-
-  if (ONLINE_MODE) {
-    try {
-      const { error } = await supabaseClient.from('checkins').upsert(row, { onConflict: 'event_code,guest_code' });
-      if (error) throw error;
-      ok = true;
-    } catch (e) {
-      console.error(e); errMsg = e.message || 'gagal';
+    // ----------------------------
+    // Toast Helper
+    // ----------------------------
+    function flashToast(msg, isWarn=false){
+      const t = document.createElement('div');
+      t.className = `fixed left-1/2 -translate-x-1/2 bottom-5 z-50 px-4 py-2 rounded-xl text-white shadow-lg animate-pop ${isWarn? 'bg-amber-600':'bg-emerald-600'}`;
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(()=> t.remove(), 1800);
     }
-  }
 
-  if (!ok) {
-    state.pending.push(row);
-    saveLocal();
-  }
-
-  state.scannedSet.add(key);
-  saveLocal();
-  updateStats();
-  setLast(`${guest}${name? ' – ' + name : ''}`);
-
-  try { beep.currentTime = 0; beep.play(); } catch {}
-  if (navigator.vibrate) navigator.vibrate(80);
-  showToast(ok ? 'Tercatat ✅' : 'Disimpan lokal (offline) 💾', ok ? 'ok' : 'info');
-}
-
-async function flushPending() {
-  if (!ONLINE_MODE || state.pending.length === 0) return 0;
-  let success = 0; const remain = [];
-  for (const row of state.pending) {
-    try {
-      const { error } = await supabaseClient.from('checkins').upsert(row, { onConflict: 'event_code,guest_code' });
-      if (error) throw error; success++;
-    } catch (e) { remain.push(row); }
-  }
-  state.pending = remain; saveLocal(); updateStats();
-  if (success > 0) showToast(`Sync ${success} data ✅`, 'ok');
-  return success;
-}
-
-function exportCSV() {
-  const rows = [...state.pending];
-  const header = ['event_code','guest_code','operator_id','device','raw_payload','created_at'];
-  const out = [header.join(',')];
-  const nowIso = new Date().toISOString();
-  for (const r of rows) {
-    const line = [r.event_code, r.guest_code, r.operator_id||'', (r.device||'').replaceAll(',', ' '), JSON.stringify(r.raw_payload||'').replaceAll(',', ';'), nowIso].map(v => `"${(v??'').toString().replaceAll('"','""')}"`).join(',');
-    out.push(line);
-  }
-  const blob = new Blob([out.join('\n')], {type:'text/csv'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `checkins_${state.eventCode||'event'}_${Date.now()}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
-}
-
-// ==========================
-// HTML5-QR callbacks
-// ==========================
-function onScanSuccess(decodedText, decodedResult) {
-  handleScanText(decodedText);
-}
-
-// Upload file fallback (gambar QR)
-const fileInput = el('file-scan');
-fileInput.addEventListener('change', async (e) => {
-  const file = e.target.files[0]; if (!file) return;
-  try { const result = await Html5QrcodeScanner.extractQRFromFile(file, true); // true=useImageBitmap
-        if (result && result.length>0) { handleScanText(result[0]); }
-        else showToast('QR tidak ditemukan di gambar', 'err');
-  } catch (err) { console.error(err); showToast('Gagal memproses gambar', 'err'); }
-  fileInput.value = '';
-});
-
-// ==========================
-// EVENTS UI
-// ==========================
-el('btn-login').addEventListener('click', login);
-el('btn-switch').addEventListener('click', switchCamera);
-el('btn-torch').addEventListener('click', toggleTorch);
-el('btn-pause').addEventListener('click', togglePause);
-el('btn-manual').addEventListener('click', () => {
-  const v = el('in-manual').value.trim(); if (!v) return; handleScanText(v); el('in-manual').value='';
-});
-el('btn-export').addEventListener('click', exportCSV);
-el('btn-reset').addEventListener('click', () => {
-  if (!confirm('Reset semua data lokal?')) return;
-  localStorage.removeItem('bt_pending');
-  localStorage.removeItem('bt_scanned_keys');
-  localStorage.removeItem('bt_session');
-  state.pending = []; state.scannedSet = new Set(); updateStats(); showToast('Reset selesai', 'info');
-});
-
-// Sync otomatis ketika online kembali
-window.addEventListener('online', flushPending);
-setInterval(flushPending, 10000);
-</script>
-
-<!-- ==========================
-     SPESIFIKASI QR (contoh)
-     --------------------------
-     1) JSON:
-        {"event":"WEDD-2025-ANDIN-DAFA","guest":"GUEST-0001","name":"Andini"}
-
-     2) PIPE:
-        WEDD-2025-ANDIN-DAFA|GUEST-0001|Andini
-
-     3) PLAIN (hanya guest):
-        GUEST-0001  (event diambil dari login)
-
-     Anda bisa membuat QR menggunakan qrcode.js, atau generator online.
-     ========================== -->
-<script>
-// ====== LIST VIEW (Daftar Check-in di bawah) – kompatibel offline & Cloudflare ======
-(function(){
-  const $ = (id)=>document.getElementById(id);
-  const card = $('list-card'); if (!card) return;
-  const body = $('list-body');
-  const btnRefresh = $('btn-refresh-list');
-  const btnAuto = $('btn-auto-list');
-
-  // Pastikan state & helper ada
-  if (!window.state) return;
-  if (!state.history) try{ state.history = JSON.parse(localStorage.getItem('bt_history')||'[]'); }catch{ state.history = []; }
-
-  // Extend saveLocal agar menyimpan history
-  const oldSaveLocal = window.saveLocal;
-  window.saveLocal = function(){
-    try { if (typeof oldSaveLocal === 'function') oldSaveLocal(); } catch{}
-    try { localStorage.setItem('bt_history', JSON.stringify(state.history||[])); } catch{}
-  };
-
-  const listState = { auto:false, timer:null, limit:50 };
-  function parseNameFromRaw(raw){
-    try{
-      if (typeof raw === 'string' && raw.trim().startsWith('{')) { const o = JSON.parse(raw); return o.name||''; }
-      if (typeof raw === 'string' && raw.includes('|')) { const p = raw.split('|'); return (p[2]||'').trim(); }
-    }catch{}
-    return '';
-  }
-  function renderRows(rows){
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    body.innerHTML = rows.map((r,i)=>{
-      const dt = r.created_at ? new Date(r.created_at) : new Date();
-      const waktu = new Intl.DateTimeFormat('id-ID',{dateStyle:'short', timeStyle:'medium', timeZone: tz}).format(dt);
-      const nama = r.name || parseNameFromRaw(r.raw_payload||'');
-      const dev = (r.device||'').slice(0,60);
-      return `<tr>
-        <td class=\"px-3 py-2\">${i+1}</td>
-        <td class=\"px-3 py-2 font-medium\">${r.guest_code||'-'}</td>
-        <td class=\"px-3 py-2\">${nama||'-'}</td>
-        <td class=\"px-3 py-2\">${r.operator_id||'-'}</td>
-        <td class=\"px-3 py-2 whitespace-nowrap\">${waktu}</td>
-        <td class=\"px-3 py-2\">${dev}</td>
-      </tr>`;
-    }).join('');
-  }
-
-  async function refreshList(){
-    // Jika Cloudflare PATCH Frontend sudah diterapkan dan token tersedia
-    if (typeof window.apiList === 'function' && window.ONLINE_MODE && (window.TOKEN||localStorage.getItem('bt_token'))){
-      try{
-        const res = await window.apiList(listState.limit, 0); // {items,nextCursor}
-        if (res && Array.isArray(res.items)) { renderRows(res.items); return; }
-      }catch(e){ console.warn('apiList failed', e); }
+    // ----------------------------
+    // QR Generator
+    // ----------------------------
+    async function makeQR(){
+      const name = $('#g_name').value.trim();
+      const code = $('#g_code').value.trim();
+      const event = $('#g_event').value.trim() || $('#eventId').value.trim();
+      const fmt = $('#g_format').value;
+      if(!code){ flashToast('Isi Kode terlebih dahulu', true); return; }
+      const payload = fmt==='json' ? JSON.stringify({name, code, event}) : `${event}|${name}|${code}`;
+      const canvas = $('#qrCanvas');
+      canvas.classList.remove('hidden');
+      await QRCode.toCanvas(canvas, payload, { width: 300, margin: 2 });
+      const url = canvas.toDataURL('image/png');
+      const a = $('#downloadQr');
+      a.href = url; a.download = `QR_${code}.png`; a.classList.remove('hidden');
     }
-    // Fallback lokal
-    const localRows = [ ...(state.history||[]), ...(state.pending||[]) ];
-    localRows.sort((a,b)=> (b.created_at||'').localeCompare(a.created_at||''));
-    renderRows(localRows.slice(0, listState.limit));
-  }
-  function startAuto(){ if (listState.auto) return; listState.auto=true; btnAuto.textContent='Auto‑refresh: ON'; listState.timer=setInterval(refreshList,5000); }
-  function stopAuto(){ listState.auto=false; btnAuto.textContent='Auto‑refresh: OFF'; if (listState.timer){ clearInterval(listState.timer); listState.timer=null; } }
 
-  btnRefresh.addEventListener('click', refreshList);
-  btnAuto.addEventListener('click', ()=> listState.auto ? stopAuto() : startAuto());
+    // ----------------------------
+    // Event Listeners
+    // ----------------------------
+    window.addEventListener('DOMContentLoaded', () => {
+      // Restore last event/operator
+      const last = JSON.parse(localStorage.getItem('guestbook_meta')||'{}');
+      if (last.eventId) $('#eventId').value = last.eventId;
+      if (last.operatorName) $('#operatorName').value = last.operatorName;
+      if (last.station) $('#station').value = last.station;
+      renderTable('');
 
-  // Tampilkan daftar setelah login
-  const oldLogin = window.login;
-  window.login = async function(){
-    await oldLogin();
-    card.classList.remove('hidden');
-    refreshList();
-    startAuto();
-  };
+      $('#startScanBtn').addEventListener('click', () => { persistMeta(); startScanner(); });
+      $('#stopScanBtn').addEventListener('click', stopScanner);
 
-  // Tambahkan ke history setiap kali scan berjalan
-  const oldHandle = window.handleScanText;
-  window.handleScanText = async function(text){
-    await oldHandle(text);
-    try {
-      const { event, guest, name, raw } = window.normalizePayload(text);
-      const createdIso = new Date().toISOString();
-      const row = { event_code: event, guest_code: guest, operator_id: state.operatorId, device: navigator.userAgent.slice(0,120), raw_payload: raw, name: name||'', created_at: createdIso };
-      state.history = state.history || [];
-      state.history.unshift(row);
-      if (state.history.length > 2000) state.history.length = 2000;
-      window.saveLocal();
-      if (!listState.auto) refreshList();
-    } catch{}
-  };
-})();
-</script>
+      $('#saveManual').addEventListener('click', () => {
+        saveRecord($('#m_name').value, $('#m_code').value, $('#m_qty').value);
+        flashToast('Input manual tersimpan');
+      });
+      $('#clearManual').addEventListener('click', () => { $('#m_name').value=''; $('#m_code').value=''; $('#m_qty').value=1; });
+
+      $('#exportCsv').addEventListener('click', exportCSV);
+      $('#resetData').addEventListener('click', () => {
+        if (confirm('Hapus semua data untuk Event ini?')){ clearEvent(); renderTable(''); flashToast('Data acara ini dihapus', true); }
+      });
+
+      $('#searchInput').addEventListener('keydown', (e)=> { if(e.key==='Enter'){ renderTable($('#searchInput').value.trim()); }});
+
+      $('#genQrBtn').addEventListener('click', makeQR);
+      $('#downloadQr').addEventListener('click', () => {});
+
+      // Re-render on event/operator change
+      ['#eventId','#operatorName','#station'].forEach(id => document.querySelector(id).addEventListener('change', ()=>{ persistMeta(); renderTable($('#searchInput').value.trim()); }))
+    });
+
+    function persistMeta(){
+      const meta = { eventId: $('#eventId').value.trim(), operatorName: $('#operatorName').value.trim(), station: $('#station').value.trim() };
+      localStorage.setItem('guestbook_meta', JSON.stringify(meta));
+    }
+  </script>
 </body>
 </html>
-
-<!-- =============================================================
-     BACKEND ALTERNATIF: CLOUDFLARE WORKERS + D1 (GRATIS)
-     =============================================================
-     Ringkas: Backend ringan di Cloudflare (Free plan) untuk menyimpan hasil scan
-     ke database SQL (D1). Frontend (file ini) tetap dipakai; cukup ganti
-     bagian kirim data dari Supabase ke endpoint Worker.
-
-     A. QUICKSTART (Terminal)
-     ------------------------
-     1) Install wrangler:  npm i -g wrangler
-     2) Login:             wrangler login
-     3) Buat DB D1:        wrangler d1 create bukutamu
-     4) Buat 3 file lokal: schema.sql, worker.js, wrangler.toml (lihat di bawah)
-     5) Jalankan schema:   wrangler d1 execute bukutamu --file=schema.sql --remote
-     6) Dev lokal:         wrangler dev
-        (API base lokal:   http://127.0.0.1:8787)
-     7) Deploy:            wrangler deploy
-
-     B. wrangler.toml (buat di root project)
-     ---------------------------------------
-     name = "buku-tamu-api"
-     main = "worker.js"
-     compatibility_date = "2025-10-01"
-
-     [[d1_databases]]
-     binding = "DB"
-     database_name = "bukutamu"
-     database_id = "<ISI DARI LANGKAH create>"
-
-     [vars]
-     SECRET = "ganti_jadi_string_acak_panjang"
-
-     C. schema.sql (D1 / SQLite)
-     ----------------------------
-     CREATE TABLE IF NOT EXISTS events (
-       code TEXT PRIMARY KEY,
-       name TEXT,
-       created_at TEXT DEFAULT (datetime('now'))
-     );
-
-     CREATE TABLE IF NOT EXISTS operators (
-       id TEXT PRIMARY KEY,
-       event_code TEXT NOT NULL,
-       operator_id TEXT NOT NULL,
-       pin_hash TEXT NOT NULL,
-       salt TEXT NOT NULL,
-       is_active INTEGER DEFAULT 1,
-       created_at TEXT DEFAULT (datetime('now')),
-       UNIQUE(event_code, operator_id)
-     );
-
-     CREATE TABLE IF NOT EXISTS guests (
-       id TEXT PRIMARY KEY,
-       event_code TEXT NOT NULL,
-       guest_code TEXT NOT NULL,
-       name TEXT,
-       invited_count INTEGER,
-       created_at TEXT DEFAULT (datetime('now')),
-       UNIQUE(event_code, guest_code)
-     );
-
-     CREATE TABLE IF NOT EXISTS checkins (
-       id INTEGER PRIMARY KEY AUTOINCREMENT,
-       event_code TEXT NOT NULL,
-       guest_code TEXT NOT NULL,
-       operator_id TEXT,
-       device TEXT,
-       raw_payload TEXT,
-       created_at TEXT DEFAULT (datetime('now')),
-       UNIQUE(event_code, guest_code)
-     );
-
-     -- Contoh seed awal (opsional)
-     INSERT OR IGNORE INTO events (code, name) VALUES ('WEDD-2025-ANDIN-DAFA','Andini & Dafa');
-
-     -- Untuk memasukkan operator, buat salt & hash:
-     --  (Linux/Mac) salt=$(openssl rand -hex 8); \
-     --  hash=$(printf "1234$salt" | openssl dgst -sha256 -hex | awk '{print $2}'); \
-     --  sqlite3 : INSERT INTO operators (id,event_code,operator_id,pin_hash,salt) VALUES (lower(hex(randomblob(16))),'WEDD-2025-ANDIN-DAFA','OP01','$hash','$salt');
-
-
-     D. worker.js (Cloudflare Worker API)
-     ------------------------------------
-     export default {
-       async fetch(request, env) {
-         const url = new URL(request.url);
-         const method = request.method;
-
-         // CORS preflight
-         if (method === 'OPTIONS') return new Response(null, { headers: cors() });
-
-         if (url.pathname === '/api/health') {
-           return json({ ok: true });
-         }
-
-         if (url.pathname === '/api/login' && method === 'POST') {
-           const { event_code, operator_id, pin } = await safeJson(request);
-           if (!event_code || !operator_id || !pin) return json({ error: 'bad request' }, 400);
-
-           const row = await env.DB.prepare(
-             'SELECT operator_id, pin_hash, salt, is_active FROM operators WHERE event_code=? AND operator_id=? LIMIT 1'
-           ).bind(event_code, operator_id).first();
-
-           if (!row || row.is_active !== 1) return json({ error: 'invalid' }, 401);
-           const h = await sha256(pin + row.salt);
-           if (h !== row.pin_hash) return json({ error: 'invalid' }, 401);
-
-           const token = await sign({ event_code, operator_id, exp: Date.now() + 8*60*60*1000 }, env.SECRET);
-           return json({ token });
-         }
-
-         if (url.pathname === '/api/checkin' && method === 'POST') {
-           const { claims, err } = await auth(request, env.SECRET);
-           if (err) return json({ error: err }, 401);
-
-           const { event_code, guest_code, raw_payload, device } = await safeJson(request);
-           if (!event_code || !guest_code) return json({ error: 'bad request' }, 400);
-           if (event_code !== claims.event_code) return json({ error: 'event mismatch' }, 400);
-
-           try {
-             await env.DB.prepare(
-               'INSERT INTO checkins (event_code, guest_code, operator_id, device, raw_payload) VALUES (?,?,?,?,?)'
-             ).bind(event_code, guest_code, claims.operator_id, device || '', raw_payload || '').run();
-             return json({ status: 'ok' });
-           } catch (e) {
-             if (/UNIQUE constraint failed/i.test(e.message)) return json({ status: 'exists' });
-             return json({ error: 'db err', detail: e.message }, 500);
-           }
-         }
-
-         if (url.pathname === '/api/batch' && method === 'POST') {
-           const { claims, err } = await auth(request, env.SECRET);
-           if (err) return json({ error: err }, 401);
-           const { rows } = await safeJson(request);
-           if (!Array.isArray(rows)) return json({ error: 'bad request' }, 400);
-           let ok = 0, exist = 0;
-           for (const r of rows) {
-             if (!r.event_code || !r.guest_code) continue;
-             if (r.event_code !== claims.event_code) continue;
-             try {
-               await env.DB.prepare(
-                 'INSERT INTO checkins (event_code, guest_code, operator_id, device, raw_payload) VALUES (?,?,?,?,?)'
-               ).bind(r.event_code, r.guest_code, claims.operator_id, r.device || '', r.raw_payload || '').run();
-               ok++;
-             } catch (e) {
-               if (/UNIQUE constraint failed/i.test(e.message)) exist++;
-             }
-           }
-           return json({ ok, exist });
-         }
-
-         return new Response('Not Found', { status: 404, headers: cors() });
-       }
-     };
-
-     // ===== util =====
-     function cors() {
-       return {
-         'Access-Control-Allow-Origin': '*',
-         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-         'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
-       };
-     }
-     function json(obj, status=200) {
-       return new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json', ...cors() } });
-     }
-     async function safeJson(req) { try { return await req.json(); } catch { return {}; } }
-     async function sha256(txt) {
-       const data = new TextEncoder().encode(txt);
-       const digest = await crypto.subtle.digest('SHA-256', data);
-       return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
-     }
-     async function sign(payload, secret) {
-       const body = b64url(JSON.stringify(payload));
-       const sig = await hmac(body, secret);
-       return `${body}.${sig}`;
-     }
-     async function verify(token, secret) {
-       if (!token) return null;
-       const [body, sig] = token.split('.');
-       if (!body || !sig) return null;
-       const expected = await hmac(body, secret);
-       if (sig !== expected) return null;
-       const claims = JSON.parse(atoburl(body));
-       if (claims.exp && Date.now() > claims.exp) return null;
-       return claims;
-     }
-     async function auth(request, secret) {
-       const a = request.headers.get('Authorization') || '';
-       const token = a.startsWith('Bearer ')? a.slice(7) : '';
-       const claims = await verify(token, secret);
-       return claims ? { claims } : { err: 'unauthorized' };
-     }
-     async function hmac(data, secret) {
-       const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-       const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
-       return b64url(sig);
-     }
-     function b64url(input) {
-       let s = typeof input === 'string' ? btoa(unescape(encodeURIComponent(input))) : btoa(String.fromCharCode(...new Uint8Array(input)));
-       return s.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-     }
-     function atoburl(s) { s = s.replace(/-/g,'+').replace(/_/g,'/'); return decodeURIComponent(escape(atob(s))); }
-
-
-     E. PATCH FRONTEND (ganti Supabase → Cloudflare API)
-     ---------------------------------------------------
-     1) Di bagian "KONFIGURASI SUPABASE", GANTI dengan blok berikut:
-
-     <script>
-     const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-       ? 'http://127.0.0.1:8787' : location.origin; // sesuaikan bila Worker di subdomain
-
-     let ONLINE_MODE = false; // akan true jika /api/health ok
-     let TOKEN = localStorage.getItem('bt_token') || '';
-
-     async function apiHealth(){ try{ const r = await fetch(API_BASE + '/api/health'); return r.ok; } catch { return false; } }
-
-     (async ()=>{ ONLINE_MODE = await apiHealth(); })();
-
-     async function apiLogin(evt, op, pin){
-       try{
-         const r = await fetch(API_BASE + '/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ event_code: evt, operator_id: op, pin }) });
-         if (!r.ok) return null; const j = await r.json(); TOKEN = j.token; localStorage.setItem('bt_token', TOKEN); return j;
-       } catch{ return null; }
-     }
-
-     async function apiCheckin(row){
-       try{
-         const r = await fetch(API_BASE + '/api/checkin', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': 'Bearer ' + (TOKEN||'') }, body: JSON.stringify({ event_code: row.event_code, guest_code: row.guest_code, raw_payload: row.raw_payload, device: row.device }) });
-         if (!r.ok) return false; const j = await r.json(); return (j.status==='ok' || j.status==='exists');
-       } catch{ return false; }
-     }
-
-     async function apiBatch(rows){
-       try{
-         const r = await fetch(API_BASE + '/api/batch', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': 'Bearer ' + (TOKEN||'') }, body: JSON.stringify({ rows }) });
-         return r.ok;
-       } catch { return false; }
-     }
-     </script>
-
-     2) Di fungsi login() pada frontend, panggil apiLogin(evt,op,pin). Bila sukses, lanjut seperti biasa.
-
-     3) Di handleScanText(), ganti bagian insert Supabase dengan:
-        if (ONLINE_MODE && TOKEN) { ok = await apiCheckin(row); }
-
-     4) Di flushPending(), jika ONLINE_MODE & TOKEN: panggil apiBatch(state.pending) atau loop apiCheckin(row) lalu kosongkan yang sukses.
-
-     Selesai. Dengan ini, aplikasi yang sama bisa memakai backend Cloudflare Workers + D1.
-
-     Keamanan ringkas:
-     - Token ditandatangani HMAC (SECRET) dan kadaluarsa 8 jam. Simpan SECRET panjang & rahasiakan.
-     - PIN operator disimpan sebagai SHA-256(salt+PIN). Jangan simpan plaintext.
-     - Tambahkan rate limit/hostname check di Worker bila diperlukan.
-
-     ============================================================= -->
-
