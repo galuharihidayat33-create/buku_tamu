@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Buku Tamu</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-6">
+  <div class="bg-white p-6 rounded-xl shadow max-w-4xl mx-auto">
+    <h1 class="text-2xl font-bold mb-4">📖 Daftar Tamu Wedding</h1>
+    <table class="table-auto w-full border">
+      <thead>
+        <tr class="bg-gray-200">
+          <th class="p-2 border">Nama</th>
+          <th class="p-2 border">Alamat</th>
+          <th class="p-2 border">Telepon</th>
+          <th class="p-2 border">Jumlah</th>
+          <th class="p-2 border">Status</th>
+        </tr>
+      </thead>
+      <tbody id="tabelTamu"></tbody>
+    </table>
+  </div>
+
+  <script>
+    async function loadTamu() {
+      const res = await fetch('/api/tamu');
+      const data = await res.json();
+      document.getElementById('tabelTamu').innerHTML = data.map(t => `
+        <tr>
+          <td class="p-2 border">${t.nama}</td>
+          <td class="p-2 border">${t.alamat || "-"}</td>
+          <td class="p-2 border">${t.telepon || "-"}</td>
+          <td class="p-2 border">${t.jumlah}</td>
+          <td class="p-2 border ${t.hadir ? 'text-green-600' : 'text-red-600'}">
+            ${t.hadir ? 'Hadir' : 'Belum Hadir'}
+          </td>
+        </tr>
+      `).join('');
+    }
+    loadTamu();
+  </script>
+</body>
+</html>

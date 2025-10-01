@@ -1,0 +1,8 @@
+name = "buku-tamu-wedding"
+main = "worker.js"
+compatibility_date = "2023-12-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bukutamu"
+database_id = "xxxx-xxxx-xxxx" # ganti dengan ID D1 kamu

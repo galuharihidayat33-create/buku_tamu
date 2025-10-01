@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Undangan Pernikahan</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+</head>
+<body class="bg-pink-50 flex items-center justify-center min-h-screen">
+  <div class="bg-white p-6 rounded-xl shadow w-full max-w-md text-center">
+    <h1 class="text-2xl font-bold mb-4">Undangan Pernikahan</h1>
+    <p id="namaTamu" class="text-lg mb-4"></p>
+    <canvas id="qrcode" class="mx-auto"></canvas>
+    <p class="mt-2 text-gray-600">Tunjukkan QR ini saat hadir</p>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("id");
+
+    fetch(`/api/tamu/${id}`)
+      .then(res => res.json())
+      .then(tamu => {
+        document.getElementById("namaTamu").innerText = `Untuk: ${tamu.nama}`;
+        const qrData = JSON.stringify({
+          id: tamu.id,
+          nama: tamu.nama,
+          telepon: tamu.telepon,
+          jumlah: tamu.jumlah
+        });
+        QRCode.toCanvas(document.getElementById("qrcode"), qrData, { width: 200 });
+      });
+  </script>
+</body>
+</html>
