@@ -1,129 +1,289 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Buku Tamu Wedding — Irwan & Aida</title>
-
-  <!-- Tailwind -->
+  <meta charset="UTF-8">
+  <title>Buku Tamu Wedding Premium++</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- html5-qrcode -->
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-
-  <!-- SheetJS -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-  <!-- Icon (Font Awesome / IG & WA) -->
-  <script src="https://kit.fontawesome.com/a2e0e9f6f9.js" crossorigin="anonymous"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <style>
-    .glass { background: rgba(255,255,255,0.85); backdrop-filter: blur(8px); }
-    .modal-backdrop { background: rgba(10,11,12,0.55); }
-    @keyframes pop { from{transform:scale(.9);opacity:0} to{transform:scale(1);opacity:1} }
-    .anim-pop { animation: pop .2s ease-out both; }
-    body { font-family: 'Poppins', sans-serif; }
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
   </style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-rose-50 via-white to-amber-50 text-slate-800 flex flex-col">
+<body class="bg-gradient-to-br from-rose-50 via-white to-yellow-50 min-h-screen font-serif">
 
-  <!-- HEADER -->
-  <header class="relative text-center py-8 bg-gradient-to-r from-rose-100 to-amber-50 shadow-md">
-    <h1 class="text-3xl md:text-4xl font-bold text-rose-700">Irwan & Aida</h1>
-    <p class="mt-1 text-sm text-slate-600">Sabtu, 12 Oktober 2025 • Bandung</p>
-    <div class="mt-2 text-xs tracking-wide text-slate-500">Buku Tamu Digital</div>
+  <!-- Header -->
+  <header class="text-center py-10 bg-gradient-to-r from-rose-200 to-yellow-100 shadow-lg">
+    <h1 class="text-4xl md:text-6xl font-bold text-rose-700 drop-shadow">💍 Ardi & Sinta</h1>
+    <p class="mt-2 text-lg text-gray-700 italic">“Forever begins today”</p>
   </header>
 
-  <!-- MAIN -->
-  <main class="flex-1 max-w-6xl mx-auto w-full p-6">
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <!-- SCANNER -->
-      <section class="glass rounded-2xl shadow-lg p-5 flex flex-col gap-4">
-        <h2 class="text-lg font-medium text-rose-700">📷 Scan QR Undangan</h2>
-        <div id="qr-wrapper" class="rounded-lg border border-slate-200 overflow-hidden">
-          <div id="qr-reader" class="w-full"></div>
-        </div>
-        <div class="flex gap-2">
-          <button id="start-scan" class="flex-1 py-2 rounded-md bg-rose-600 text-white hover:bg-rose-700">Mulai Scan</button>
-          <button id="stop-scan" class="py-2 rounded-md bg-slate-200 hover:bg-slate-300">Stop</button>
-          <button id="toggle-camera" class="py-2 rounded-md bg-amber-400 text-white hover:bg-amber-500">Ganti Kamera</button>
-        </div>
-      </section>
-
-      <!-- FORM -->
-      <section class="glass rounded-2xl shadow-lg p-5 flex flex-col gap-4">
-        <h2 class="text-lg font-medium text-rose-700">📝 Check-in Manual</h2>
-        <form id="manual-form" class="space-y-3">
-          <input id="name" required placeholder="Nama Lengkap" class="w-full rounded-lg border border-slate-200 px-3 py-2" />
-          <input id="org" placeholder="Instansi / Perusahaan" class="w-full rounded-lg border border-slate-200 px-3 py-2" />
-          <input id="phone" placeholder="Nomor HP" class="w-full rounded-lg border border-slate-200 px-3 py-2" />
-          <textarea id="message" rows="2" placeholder="Ucapan / Keperluan" class="w-full rounded-lg border border-slate-200 px-3 py-2"></textarea>
-          <div class="flex gap-2">
-            <button type="submit" class="flex-1 py-2 rounded-md bg-rose-600 text-white hover:bg-rose-700">Check-in</button>
-            <button id="clear-form" type="button" class="py-2 rounded-md bg-slate-200 hover:bg-slate-300">Bersihkan</button>
-          </div>
-        </form>
-        <div class="flex gap-2 mt-2">
-          <button id="export-xlsx" class="flex-1 py-2 rounded-md bg-green-600 text-white hover:bg-green-700">Export .xlsx</button>
-          <button id="export-csv" class="py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700">Export .csv</button>
-          <button id="clear-db" class="py-2 rounded-md bg-red-500 text-white hover:bg-red-600">Hapus Semua</button>
-        </div>
-      </section>
+  <main class="container mx-auto p-6 space-y-12">
+    <!-- Statistik -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+      <div class="bg-white/70 backdrop-blur-lg shadow-lg rounded-xl p-4">
+        <p class="text-3xl font-bold text-rose-600" id="totalTamu">0</p>
+        <p class="text-gray-600">Total Tamu</p>
+      </div>
+      <div class="bg-white/70 backdrop-blur-lg shadow-lg rounded-xl p-4">
+        <p class="text-3xl font-bold text-yellow-600" id="totalOrang">0</p>
+        <p class="text-gray-600">Total Orang</p>
+      </div>
+      <div class="bg-white/70 backdrop-blur-lg shadow-lg rounded-xl p-4">
+        <canvas id="chartTamu" height="80"></canvas>
+      </div>
+      <div class="bg-white/70 backdrop-blur-lg shadow-lg rounded-xl p-4 flex flex-col justify-center">
+        <button onclick="exportCSV()" class="bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 mb-2">⬇️ Export CSV</button>
+        <button onclick="openResetModal()" class="bg-red-500 text-white py-2 rounded-lg hover:bg-red-600">🗑️ Reset Data</button>
+      </div>
     </div>
 
-    <!-- TABLE -->
-    <section class="mt-6 bg-white rounded-2xl shadow p-4">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-lg font-medium">📋 Daftar Tamu</h3>
-        <div class="text-sm text-slate-500">Total: <span id="count-total">0</span></div>
+    <!-- Scanner & Form -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <!-- Scanner -->
+      <div class="bg-white/70 backdrop-blur-lg rounded-2xl shadow-xl p-6">
+        <h2 class="text-xl font-semibold mb-4 text-gray-700">📷 QR Check-In</h2>
+        <div class="flex flex-col gap-4">
+          <div id="reader" class="w-full border rounded-lg min-h-[300px]"></div>
+          <div class="flex gap-2">
+            <button id="startScan" class="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600">Mulai Scan</button>
+            <button id="stopScan" class="flex-1 bg-gray-400 text-white py-2 rounded-lg hover:bg-gray-500">Stop</button>
+          </div>
+        </div>
       </div>
-      <div class="overflow-x-auto">
+
+      <!-- Form Manual -->
+      <div class="bg-white/70 backdrop-blur-lg rounded-2xl shadow-xl p-6">
+        <h2 class="text-xl font-semibold mb-4 text-gray-700">✍️ Isi Data Manual</h2>
+        <form id="guestForm" class="space-y-3">
+          <input type="text" id="nama" placeholder="Nama Tamu" class="w-full border rounded-lg p-2" required>
+          <input type="number" id="jumlah" placeholder="Jumlah Orang" class="w-full border rounded-lg p-2" min="1" required>
+          <textarea id="ucapan" placeholder="Ucapan untuk pengantin" class="w-full border rounded-lg p-2"></textarea>
+          <button type="submit" class="w-full bg-rose-500 text-white py-2 rounded-lg hover:bg-rose-600">
+            Simpan
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Daftar tamu -->
+    <section class="bg-white/70 backdrop-blur-lg rounded-2xl shadow-xl p-6">
+      <h2 class="text-xl font-semibold mb-4 text-gray-700">📋 Daftar Tamu</h2>
+      <div class="overflow-y-auto max-h-80 border rounded-lg">
         <table class="w-full text-sm">
-          <thead class="bg-slate-50 sticky top-0">
+          <thead class="bg-rose-100 sticky top-0">
             <tr>
-              <th class="p-2 text-left">Waktu</th>
-              <th class="p-2 text-left">Nama</th>
-              <th class="p-2 text-left">Instansi</th>
-              <th class="p-2 text-left">No. HP</th>
-              <th class="p-2 text-left">Pesan</th>
-              <th class="p-2 text-left">Aksi</th>
+              <th class="p-2 border">Nama</th>
+              <th class="p-2 border">Jumlah</th>
+              <th class="p-2 border">Ucapan</th>
             </tr>
           </thead>
-          <tbody id="guest-body"></tbody>
+          <tbody id="guestList"></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- Slideshow Ucapan -->
+    <section>
+      <h2 class="text-2xl font-bold text-center text-rose-600 mb-6">💌 Ucapan untuk Pengantin</h2>
+      <div id="slideshow" class="bg-white/70 backdrop-blur-lg shadow-xl rounded-2xl p-8 text-center text-xl italic text-gray-700 h-40 flex items-center justify-center">
+        Belum ada ucapan...
       </div>
     </section>
   </main>
 
-  <!-- FOOTER -->
-  <footer class="bg-gradient-to-r from-rose-100 to-amber-50 text-center py-6 text-sm text-slate-600 border-t">
-    <p class="mb-2">Supported by <a href="https://arinvitation.my.id" target="_blank" class="font-medium text-rose-700 hover:underline">arinvitation.my.id</a></p>
-    <div class="flex justify-center gap-4 text-lg">
-      <a href="https://instagram.com/arinvitation.my.id" target="_blank" class="text-pink-600 hover:text-pink-700"><i class="fab fa-instagram"></i></a>
-      <a href="https://wa.me/6281234567890" target="_blank" class="text-green-600 hover:text-green-700"><i class="fab fa-whatsapp"></i></a>
+  <!-- Footer -->
+  <footer class="text-center py-6 mt-10 bg-gradient-to-r from-yellow-100 to-rose-200 text-gray-700">
+    <p class="text-sm">Supported by 
+      <a href="https://arinvitation.my.id" target="_blank" class="text-rose-600 font-semibold">arinvitation.my.id</a>
+    </p>
+    <div class="flex justify-center gap-4 mt-2 text-xl">
+      <a href="https://instagram.com/arinvitation.my.id" target="_blank" class="text-pink-600">📸</a>
+      <a href="https://wa.me/6281234567890" target="_blank" class="text-green-600">💬</a>
     </div>
   </footer>
 
-  <!-- MODAL -->
-  <div id="modal" class="hidden fixed inset-0 z-50 flex items-center justify-center">
-    <div class="absolute inset-0 modal-backdrop"></div>
-    <div class="relative bg-white rounded-xl shadow-xl p-6 w-[90%] max-w-md anim-pop">
-      <h4 id="modal-title" class="text-lg font-semibold mb-2">Pemberitahuan</h4>
-      <p id="modal-message" class="text-sm text-slate-700 mb-4"></p>
-      <div class="text-right">
-        <button id="modal-ok" class="px-4 py-2 rounded-md bg-rose-600 text-white hover:bg-rose-700">OK</button>
+  <!-- Toast Container -->
+  <div id="toastContainer" class="fixed top-5 right-5 space-y-3 z-50"></div>
+
+  <!-- Modal Reset -->
+  <div id="resetModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center">
+    <div class="bg-white p-6 rounded-xl shadow-lg text-center">
+      <p class="text-lg font-semibold mb-4">Yakin hapus semua data tamu?</p>
+      <div class="flex gap-4 justify-center">
+        <button onclick="confirmReset()" class="bg-red-500 text-white px-4 py-2 rounded-lg">Ya</button>
+        <button onclick="closeResetModal()" class="bg-gray-300 px-4 py-2 rounded-lg">Batal</button>
       </div>
     </div>
   </div>
 
-  <!-- SOUNDS -->
-  <audio id="sound-success" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
-  <audio id="sound-dup" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
+  <!-- Suara -->
+  <audio id="beepSound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+  <audio id="errorSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
 
-  <!-- SCRIPT (pakai yang versi sebelumnya, tidak saya hapus biar singkat di sini) -->
   <script>
-    // === Paste seluruh script logika buku tamu versi sebelumnya di sini ===
-    // (IndexedDB, Form, Export, Scanner, Modal, Sound)
+    const form = document.getElementById("guestForm");
+    const guestList = document.getElementById("guestList");
+    const totalTamuEl = document.getElementById("totalTamu");
+    const totalOrangEl = document.getElementById("totalOrang");
+    const slideshow = document.getElementById("slideshow");
+
+    let tamu = JSON.parse(localStorage.getItem("weddingGuests")) || [];
+    let chart;
+    let slideIndex = 0;
+    let slideInterval;
+
+    function renderGuests() {
+      guestList.innerHTML = "";
+      let totalOrang = 0;
+      let ucapanArray = [];
+
+      tamu.forEach(g => {
+        totalOrang += parseInt(g.jumlah);
+        guestList.innerHTML += `
+          <tr>
+            <td class="border p-2">${g.nama}</td>
+            <td class="border p-2 text-center">${g.jumlah}</td>
+            <td class="border p-2">${g.ucapan || "-"}</td>
+          </tr>
+        `;
+        if (g.ucapan) ucapanArray.push(`${g.ucapan} — ${g.nama}`);
+      });
+
+      totalTamuEl.textContent = tamu.length;
+      totalOrangEl.textContent = totalOrang;
+
+      updateChart(totalOrang);
+      startSlideshow(ucapanArray);
+    }
+
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      const nama = document.getElementById("nama").value;
+      const jumlah = document.getElementById("jumlah").value;
+      const ucapan = document.getElementById("ucapan").value;
+      tamu.push({nama, jumlah, ucapan});
+      localStorage.setItem("weddingGuests", JSON.stringify(tamu));
+      form.reset();
+      renderGuests();
+      showToast("✅ Tamu ditambahkan!", "success");
+      confettiLaunch();
+    });
+
+    function exportCSV() {
+      if (tamu.length === 0) return showToast("⚠️ Belum ada data tamu!", "error");
+      let csv = "Nama,Jumlah,Ucapan\n";
+      tamu.forEach(g => csv += `"${g.nama}","${g.jumlah}","${g.ucapan.replace(/"/g, '""')}"\n`);
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "daftar_tamu_wedding.csv";
+      link.click();
+      showToast("⬇️ Data diexport ke CSV", "success");
+    }
+
+    function openResetModal(){ document.getElementById("resetModal").classList.remove("hidden"); }
+    function closeResetModal(){ document.getElementById("resetModal").classList.add("hidden"); }
+    function confirmReset(){
+      tamu = [];
+      localStorage.removeItem("weddingGuests");
+      renderGuests();
+      closeResetModal();
+      showToast("🗑️ Semua data dihapus!", "error");
+    }
+
+    function updateChart(total) {
+      const ctx = document.getElementById("chartTamu").getContext("2d");
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: "doughnut",
+        data: { labels: ["Orang Hadir"], datasets: [{ data: [total], backgroundColor: ["#f43f5e"] }] }
+      });
+    }
+
+    function startSlideshow(data) {
+      clearInterval(slideInterval);
+      if (data.length === 0) { slideshow.textContent = "Belum ada ucapan..."; return; }
+      slideshow.textContent = data[0];
+      slideIndex = 0;
+      slideInterval = setInterval(() => {
+        slideIndex = (slideIndex + 1) % data.length;
+        slideshow.textContent = data[slideIndex];
+      }, 4000);
+    }
+
+    function showToast(message, type = "success") {
+      const container = document.getElementById("toastContainer");
+      const toast = document.createElement("div");
+      toast.className = `px-4 py-3 rounded-lg shadow-lg text-white transition transform 
+        ${type === "success" ? "bg-green-500" : "bg-red-500"} 
+        animate-fade-in`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.add("opacity-0", "translate-x-10");
+        setTimeout(() => toast.remove(), 500);
+      }, 3000);
+    }
+
+    function confettiLaunch() {
+      confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+    }
+
+    renderGuests();
+
+    // ✅ QR Scanner Stable
+    let qrScanner;
+    let isScanning = false;
+
+    async function startScanner() {
+      if (isScanning) return;
+      if (!qrScanner) qrScanner = new Html5Qrcode("reader");
+
+      try {
+        await qrScanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: 250 },
+          (decodedText) => {
+            const beepSound = document.getElementById("beepSound");
+            const errorSound = document.getElementById("errorSound");
+            const isDuplicate = tamu.some(t => t.nama === decodedText);
+
+            if (isDuplicate) {
+              errorSound.play();
+              showToast("⚠️ QR sudah pernah discan!", "error");
+            } else {
+              beepSound.play();
+              tamu.push({ nama: decodedText, jumlah: 1, ucapan: "" });
+              localStorage.setItem("weddingGuests", JSON.stringify(tamu));
+              renderGuests();
+              showToast("✅ QR berhasil discan: " + decodedText, "success");
+              confettiLaunch();
+            }
+          }
+        );
+        isScanning = true;
+      } catch (err) {
+        alert("Gagal membuka kamera: " + err);
+      }
+    }
+
+    async function stopScanner() {
+      if (qrScanner && isScanning) {
+        await qrScanner.stop();
+        isScanning = false;
+      }
+    }
+
+    document.getElementById("startScan").addEventListener("click", startScanner);
+    document.getElementById("stopScan").addEventListener("click", stopScanner);
   </script>
 </body>
 </html>
