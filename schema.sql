@@ -1,8 +1,0 @@
-CREATE TABLE tamu (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  nama TEXT NOT NULL,
-  alamat TEXT,
-  telepon TEXT,
-  jumlah INTEGER DEFAULT 1,
-  hadir BOOLEAN DEFAULT 0
-);
