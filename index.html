@@ -1,300 +1,104 @@
 
-<!doctype html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Buku Tamu Digital</title>
-  <!-- Tailwind via CDN -->
+  <meta charset="UTF-8">
+  <title>Buku Tamu Wedding</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- html5-qrcode untuk QR scanning -->
-  <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+  <!-- ✅ CDN stabil html5-qrcode -->
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 p-6">
-  <div class="max-w-5xl mx-auto">
-    <header class="mb-6">
-      <h1 class="text-3xl font-semibold">Buku Tamu Digital</h1>
-      <p class="text-sm text-slate-600">Scan QR untuk check-in cepat atau isi manual. Data tersimpan di database lokal (IndexedDB) dan bisa diekspor CSV.</p>
-    </header>
+<body class="bg-gradient-to-br from-pink-100 to-yellow-100 min-h-screen flex items-center justify-center font-sans">
+  <div class="bg-white shadow-lg rounded-2xl p-6 w-full max-w-2xl">
+    <h1 class="text-2xl font-bold text-center text-pink-600 mb-4">💍 Buku Tamu Pernikahan</h1>
+    
+    <!-- QR Scanner -->
+    <div class="mb-6">
+      <h2 class="text-lg font-semibold text-gray-700 mb-2">Scan Undangan (QR)</h2>
+      <div id="reader" class="w-full border rounded-lg"></div>
+    </div>
 
-    <main class="grid gap-6 lg:grid-cols-2">
-      <!-- Scanner + manual form -->
-      <section class="bg-white p-4 rounded-2xl shadow-sm">
-        <h2 class="text-xl font-medium mb-3">Scan QR untuk Check-in</h2>
-        <div id="scanner" class="border rounded p-2 mb-3">
-          <div id="qr-reader" style="width:100%"></div>
-        </div>
-        <div class="flex gap-2">
-          <button id="start-scan" class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Mulai Scan</button>
-          <button id="stop-scan" class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700">Hentikan</button>
-          <button id="toggle-camera" class="px-3 py-2 bg-amber-500 text-white rounded hover:bg-amber-600">Ganti Kamera</button>
-        </div>
+    <!-- Form Manual -->
+    <div>
+      <h2 class="text-lg font-semibold text-gray-700 mb-2">Isi Data Manual</h2>
+      <form id="guestForm" class="space-y-3">
+        <input type="text" id="nama" placeholder="Nama Tamu" class="w-full border rounded-lg p-2" required>
+        <input type="number" id="jumlah" placeholder="Jumlah Tamu" class="w-full border rounded-lg p-2" min="1" required>
+        <textarea id="ucapan" placeholder="Ucapan untuk pengantin" class="w-full border rounded-lg p-2"></textarea>
+        <button type="submit" class="w-full bg-pink-500 text-white py-2 rounded-lg hover:bg-pink-600">
+          Simpan
+        </button>
+      </form>
+    </div>
 
-        <hr class="my-4">
-
-        <h2 class="text-xl font-medium mb-3">Check-in Manual</h2>
-        <form id="manual-form" class="space-y-3">
-          <div>
-            <label class="block text-sm">Nama</label>
-            <input id="name" required class="w-full border rounded px-3 py-2" />
-          </div>
-          <div>
-            <label class="block text-sm">Instansi / Perusahaan</label>
-            <input id="org" class="w-full border rounded px-3 py-2" />
-          </div>
-          <div>
-            <label class="block text-sm">Nomor Kontak</label>
-            <input id="phone" class="w-full border rounded px-3 py-2" />
-          </div>
-          <div>
-            <label class="block text-sm">Pesan / Keperluan</label>
-            <textarea id="message" class="w-full border rounded px-3 py-2" rows="2"></textarea>
-          </div>
-          <div class="flex gap-2">
-            <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Check-in</button>
-            <button id="clear-form" type="button" class="px-4 py-2 bg-gray-200 rounded">Bersihkan</button>
-          </div>
-        </form>
-      </section>
-
-      <!-- Data table + controls -->
-      <section class="bg-white p-4 rounded-2xl shadow-sm">
-        <div class="flex items-start justify-between">
-          <h2 class="text-xl font-medium">Daftar Tamu</h2>
-          <div class="flex gap-2">
-            <button id="export-csv" class="px-3 py-2 bg-indigo-600 text-white rounded">Ekspor CSV</button>
-            <button id="clear-db" class="px-3 py-2 bg-red-500 text-white rounded">Hapus Semua</button>
-          </div>
-        </div>
-
-        <div class="mt-4 overflow-x-auto">
-          <table id="guest-table" class="min-w-full text-sm">
-            <thead>
-              <tr class="text-left border-b">
-                <th class="p-2">Waktu</th>
-                <th class="p-2">Nama</th>
-                <th class="p-2">Instansi</th>
-                <th class="p-2">No. HP</th>
-                <th class="p-2">Pesan</th>
-                <th class="p-2">Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="guest-body"></tbody>
-          </table>
-        </div>
-      </section>
-    </main>
-
-    <footer class="text-xs text-slate-500 mt-6">Catatan: QR yang dipindai bisa berisi JSON (mis. {"name":"A,B","org":"X","phone":"081...","message":"..."}) atau hanya nama. Sistem mencoba menafsirkan isi secara otomatis.</footer>
+    <!-- List Tamu -->
+    <div class="mt-6">
+      <h2 class="text-lg font-semibold text-gray-700 mb-2">Daftar Tamu</h2>
+      <table class="w-full border text-sm">
+        <thead>
+          <tr class="bg-pink-200">
+            <th class="p-2 border">Nama</th>
+            <th class="p-2 border">Jumlah</th>
+            <th class="p-2 border">Ucapan</th>
+          </tr>
+        </thead>
+        <tbody id="guestList"></tbody>
+      </table>
+    </div>
   </div>
 
   <script>
-  document.addEventListener("DOMContentLoaded", function(){
-    // Simple IndexedDB wrapper
-    const DB_NAME = 'bukutamu_db_v1';
-    const STORE = 'guests';
+    const form = document.getElementById("guestForm");
+    const guestList = document.getElementById("guestList");
+    let tamu = JSON.parse(localStorage.getItem("weddingGuests")) || [];
 
-    function openDB(){
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 1);
-        req.onupgradeneeded = e => {
-          const db = e.target.result;
-          if(!db.objectStoreNames.contains(STORE)){
-            db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
-          }
-        }
-        req.onsuccess = e => resolve(e.target.result);
-        req.onerror = e => reject(e.target.error);
+    function renderGuests() {
+      guestList.innerHTML = "";
+      tamu.forEach(g => {
+        guestList.innerHTML += `
+          <tr>
+            <td class="border p-2">${g.nama}</td>
+            <td class="border p-2 text-center">${g.jumlah}</td>
+            <td class="border p-2">${g.ucapan || "-"}</td>
+          </tr>
+        `;
       });
     }
 
-    async function addGuest(guest){
-      const db = await openDB();
-      return new Promise((resolve,reject)=>{
-        const tx = db.transaction(STORE, 'readwrite');
-        const store = tx.objectStore(STORE);
-        const req = store.add(guest);
-        req.onsuccess = ()=>{ resolve(req.result); }
-        req.onerror = ()=>reject(req.error);
-      });
-    }
-
-    async function getAllGuests(){
-      const db = await openDB();
-      return new Promise((resolve,reject)=>{
-        const tx = db.transaction(STORE, 'readonly');
-        const store = tx.objectStore(STORE);
-        const req = store.getAll();
-        req.onsuccess = ()=>resolve(req.result);
-        req.onerror = ()=>reject(req.error);
-      });
-    }
-
-    async function deleteGuest(id){
-      const db = await openDB();
-      return new Promise((resolve,reject)=>{
-        const tx = db.transaction(STORE, 'readwrite');
-        const store = tx.objectStore(STORE);
-        const req = store.delete(id);
-        req.onsuccess = ()=>resolve();
-        req.onerror = ()=>reject(req.error);
-      });
-    }
-
-    async function clearAll(){
-      const db = await openDB();
-      return new Promise((resolve,reject)=>{
-        const tx = db.transaction(STORE, 'readwrite');
-        const store = tx.objectStore(STORE);
-        const req = store.clear();
-        req.onsuccess = ()=>resolve();
-        req.onerror = ()=>reject(req.error);
-      });
-    }
-
-    // UI helpers
-    const guestBody = document.getElementById('guest-body');
-    function rowTemplate(g){
-      const time = new Date(g.timestamp).toLocaleString();
-      return `
-        <tr class="border-b">
-          <td class="p-2">${time}</td>
-          <td class="p-2">${escapeHtml(g.name||'')}</td>
-          <td class="p-2">${escapeHtml(g.org||'')}</td>
-          <td class="p-2">${escapeHtml(g.phone||'')}</td>
-          <td class="p-2">${escapeHtml(g.message||'')}</td>
-          <td class="p-2"><button data-id="${g.id}" class="delete-btn px-2 py-1 bg-red-500 text-white rounded text-xs">Hapus</button></td>
-        </tr>
-      `;
-    }
-
-    function escapeHtml(s){ return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
-
-    async function refreshTable(){
-      const all = await getAllGuests();
-      if(all.length===0){ guestBody.innerHTML = '<tr><td class="p-4" colspan="6">Belum ada tamu terdaftar.</td></tr>'; return; }
-      guestBody.innerHTML = all.sort((a,b)=>b.timestamp-a.timestamp).map(rowTemplate).join('');
-      document.querySelectorAll('.delete-btn').forEach(btn=>{
-        btn.onclick = async ()=>{
-          const id = Number(btn.dataset.id);
-          if(confirm('Hapus entri ini?')){
-            await deleteGuest(id);
-            await refreshTable();
-          }
-        }
-      });
-    }
-
-    // Manual form handling
-    const form = document.getElementById('manual-form');
-    form.addEventListener('submit', async (e)=>{
+    form.addEventListener("submit", e => {
       e.preventDefault();
-      const payload = {
-        name: document.getElementById('name').value.trim(),
-        org: document.getElementById('org').value.trim(),
-        phone: document.getElementById('phone').value.trim(),
-        message: document.getElementById('message').value.trim(),
-        timestamp: Date.now()
-      };
-      await addGuest(payload);
+      const nama = document.getElementById("nama").value;
+      const jumlah = document.getElementById("jumlah").value;
+      const ucapan = document.getElementById("ucapan").value;
+      tamu.push({nama, jumlah, ucapan});
+      localStorage.setItem("weddingGuests", JSON.stringify(tamu));
       form.reset();
-      await refreshTable();
-      alert('Check-in berhasil!');
-    });
-    document.getElementById('clear-form').addEventListener('click', ()=>form.reset());
-
-    // Export CSV
-    document.getElementById('export-csv').addEventListener('click', async ()=>{
-      const all = await getAllGuests();
-      if(all.length===0){ alert('Tidak ada data untuk diekspor.'); return; }
-      const rows = [['Waktu','Nama','Instansi','Nomor','Pesan']];
-      all.sort((a,b)=>b.timestamp-a.timestamp).forEach(g=>{
-        rows.push([new Date(g.timestamp).toLocaleString(), g.name||'', g.org||'', g.phone||'', g.message||'']);
-      });
-      const csv = rows.map(r=>r.map(c=>`"${String(c).replaceAll('"','""')}"`).join(',')).join('\n');
-      const blob = new Blob([csv], {type:'text/csv'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'bukutamu_export.csv'; a.click(); URL.revokeObjectURL(url);
+      renderGuests();
     });
 
-    // Clear DB
-    document.getElementById('clear-db').addEventListener('click', async ()=>{
-      if(confirm('Hapus semua data tamu? Tindakan ini tidak dapat dibatalkan.')){
-        await clearAll();
-        await refreshTable();
+    renderGuests();
+
+    // ✅ QR Scanner dengan handling error
+    document.addEventListener("DOMContentLoaded", () => {
+      if (typeof Html5Qrcode === "undefined") {
+        alert("⚠️ Gagal memuat library scanner. Cek koneksi internet!");
+        return;
       }
+
+      const qrScanner = new Html5Qrcode("reader");
+      qrScanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 200 },
+        (decodedText) => {
+          alert("QR Terdeteksi: " + decodedText);
+          tamu.push({nama: decodedText, jumlah: 1, ucapan: ""});
+          localStorage.setItem("weddingGuests", JSON.stringify(tamu));
+          renderGuests();
+          qrScanner.stop();
+        },
+        (errorMessage) => { /* abaikan error kecil */ }
+      ).catch(err => console.error("Gagal memulai scanner:", err));
     });
-
-    // QR scanner using html5-qrcode
-    let html5QrScanner = null;
-    let currentCameraId = null;
-    let cameras = [];
-
-    async function startScanner(){
-      if(html5QrScanner) return;
-      try{
-        cameras = await Html5Qrcode.getCameras();
-        if(cameras && cameras.length){
-          currentCameraId = cameras[0].id;
-          html5QrScanner = new Html5Qrcode("qr-reader");
-          html5QrScanner.start(currentCameraId, {fps:10, qrbox:250}, (decoded)=>{
-            handleScanned(decoded);
-          }, (err)=>{});
-        } else {
-          alert('Tidak ada kamera yang terdeteksi.');
-        }
-      }catch(err){ console.error(err); alert('Gagal memulai scanner: '+err); }
-    }
-
-    async function stopScanner(){
-      if(!html5QrScanner) return;
-      try{ await html5QrScanner.stop(); html5QrScanner.clear(); html5QrScanner = null; }
-      catch(e){ console.error(e); }
-    }
-
-    document.getElementById('start-scan').addEventListener('click', startScanner);
-    document.getElementById('stop-scan').addEventListener('click', stopScanner);
-    document.getElementById('toggle-camera').addEventListener('click', async ()=>{
-      if(!cameras || cameras.length<=1){ alert('Hanya satu kamera tersedia.'); return; }
-      const idx = cameras.findIndex(c=>c.id===currentCameraId);
-      const next = cameras[(idx+1)%cameras.length];
-      await stopScanner();
-      currentCameraId = next.id;
-      html5QrScanner = new Html5Qrcode("qr-reader");
-      html5QrScanner.start(currentCameraId, {fps:10, qrbox:250}, (decoded)=>{ handleScanned(decoded); }, (err)=>{});
-    });
-
-    async function handleScanned(text){
-      let parsed = {};
-      try{ parsed = JSON.parse(text); }
-      catch(err){
-        if(text.includes('=') && (text.includes('&') || text.includes(';'))){
-          const parts = text.replaceAll(';','&').split('&');
-          parts.forEach(p=>{ const [k,v] = p.split('='); if(k) parsed[k.trim()] = decodeURIComponent((v||'').trim()); });
-        } else {
-          parsed.name = text;
-        }
-      }
-      if(parsed.name) document.getElementById('name').value = parsed.name;
-      if(parsed.org) document.getElementById('org').value = parsed.org;
-      if(parsed.phone) document.getElementById('phone').value = parsed.phone;
-      if(parsed.message) document.getElementById('message').value = parsed.message;
-
-      const payload = {
-        name: parsed.name || document.getElementById('name').value || 'Tamu',
-        org: parsed.org || document.getElementById('org').value || '',
-        phone: parsed.phone || document.getElementById('phone').value || '',
-        message: parsed.message || document.getElementById('message').value || 'Check-in via QR',
-        timestamp: Date.now()
-      };
-      await addGuest(payload);
-      await refreshTable();
-      alert('Check-in via QR berhasil: '+(payload.name||'Tamu'));
-    }
-
-    (async ()=>{ await refreshTable(); })();
-  });
   </script>
 </body>
 </html>
