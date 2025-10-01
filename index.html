@@ -1,49 +1,59 @@
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
   <title>Buku Tamu Wedding</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- ✅ CDN stabil html5-qrcode -->
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
-<body class="bg-gradient-to-br from-pink-100 to-yellow-100 min-h-screen flex items-center justify-center font-sans">
-  <div class="bg-white shadow-lg rounded-2xl p-6 w-full max-w-2xl">
-    <h1 class="text-2xl font-bold text-center text-pink-600 mb-4">💍 Buku Tamu Pernikahan</h1>
+<body class="bg-gradient-to-br from-pink-100 to-yellow-100 min-h-screen font-sans">
+  <div class="container mx-auto p-4">
+    <h1 class="text-3xl font-bold text-center text-pink-600 mb-6">💍 Buku Tamu Pernikahan</h1>
     
-    <!-- QR Scanner -->
-    <div class="mb-6">
-      <h2 class="text-lg font-semibold text-gray-700 mb-2">Scan Undangan (QR)</h2>
-      <div id="reader" class="w-full border rounded-lg"></div>
-    </div>
+    <!-- Wrapper responsif -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      
+      <!-- Kolom kiri: QR Scanner -->
+      <div class="bg-white rounded-2xl shadow-lg p-4 flex flex-col items-center">
+        <h2 class="text-lg font-semibold text-gray-700 mb-3">📷 Scan Undangan</h2>
+        <div id="reader" class="w-full border rounded-lg"></div>
+      </div>
 
-    <!-- Form Manual -->
-    <div>
-      <h2 class="text-lg font-semibold text-gray-700 mb-2">Isi Data Manual</h2>
-      <form id="guestForm" class="space-y-3">
-        <input type="text" id="nama" placeholder="Nama Tamu" class="w-full border rounded-lg p-2" required>
-        <input type="number" id="jumlah" placeholder="Jumlah Tamu" class="w-full border rounded-lg p-2" min="1" required>
-        <textarea id="ucapan" placeholder="Ucapan untuk pengantin" class="w-full border rounded-lg p-2"></textarea>
-        <button type="submit" class="w-full bg-pink-500 text-white py-2 rounded-lg hover:bg-pink-600">
-          Simpan
+      <!-- Kolom kanan: Form & Daftar Tamu -->
+      <div class="bg-white rounded-2xl shadow-lg p-4 flex flex-col">
+        <!-- Form Manual -->
+        <h2 class="text-lg font-semibold text-gray-700 mb-3">✍️ Isi Data Manual</h2>
+        <form id="guestForm" class="space-y-3 mb-6">
+          <input type="text" id="nama" placeholder="Nama Tamu" class="w-full border rounded-lg p-2" required>
+          <input type="number" id="jumlah" placeholder="Jumlah Tamu" class="w-full border rounded-lg p-2" min="1" required>
+          <textarea id="ucapan" placeholder="Ucapan untuk pengantin" class="w-full border rounded-lg p-2"></textarea>
+          <button type="submit" class="w-full bg-pink-500 text-white py-2 rounded-lg hover:bg-pink-600">
+            Simpan
+          </button>
+        </form>
+
+        <!-- List Tamu -->
+        <h2 class="text-lg font-semibold text-gray-700 mb-3">📋 Daftar Tamu</h2>
+        <div class="overflow-x-auto mb-4">
+          <table class="w-full border text-sm">
+            <thead>
+              <tr class="bg-pink-200">
+                <th class="p-2 border">Nama</th>
+                <th class="p-2 border">Jumlah</th>
+                <th class="p-2 border">Ucapan</th>
+              </tr>
+            </thead>
+            <tbody id="guestList"></tbody>
+          </table>
+        </div>
+        
+        <!-- Tombol Export -->
+        <button onclick="exportCSV()" class="w-full bg-green-500 text-white py-2 rounded-lg hover:bg-green-600">
+          ⬇️ Export ke CSV
         </button>
-      </form>
-    </div>
-
-    <!-- List Tamu -->
-    <div class="mt-6">
-      <h2 class="text-lg font-semibold text-gray-700 mb-2">Daftar Tamu</h2>
-      <table class="w-full border text-sm">
-        <thead>
-          <tr class="bg-pink-200">
-            <th class="p-2 border">Nama</th>
-            <th class="p-2 border">Jumlah</th>
-            <th class="p-2 border">Ucapan</th>
-          </tr>
-        </thead>
-        <tbody id="guestList"></tbody>
-      </table>
+      </div>
     </div>
   </div>
 
@@ -78,7 +88,25 @@
 
     renderGuests();
 
-    // ✅ QR Scanner dengan handling error
+    // ✅ Export CSV
+    function exportCSV() {
+      if (tamu.length === 0) {
+        alert("Belum ada data tamu!");
+        return;
+      }
+      let csv = "Nama,Jumlah,Ucapan\n";
+      tamu.forEach(g => {
+        csv += `"${g.nama}","${g.jumlah}","${g.ucapan.replace(/"/g, '""')}"\n`;
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "daftar_tamu_wedding.csv");
+      link.click();
+    }
+
+    // ✅ QR Scanner
     document.addEventListener("DOMContentLoaded", () => {
       if (typeof Html5Qrcode === "undefined") {
         alert("⚠️ Gagal memuat library scanner. Cek koneksi internet!");
@@ -96,11 +124,9 @@
           renderGuests();
           qrScanner.stop();
         },
-        (errorMessage) => { /* abaikan error kecil */ }
+        (errorMessage) => {}
       ).catch(err => console.error("Gagal memulai scanner:", err));
     });
   </script>
 </body>
 </html>
-
-
