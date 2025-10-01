@@ -71,7 +71,8 @@
       <article class="glass rounded-2xl shadow-glass p-4 md:p-6 animate-fade-up">
         <h2 class="font-display text-lg text-brand-800 mb-3">Scanner QR</h2>
         <div id="qr-reader" class="rounded-xl overflow-hidden ring-1 ring-slate-200"></div>
-        <p id="scanHint" class="text-xs text-slate-500 mt-2">Format didukung: JSON (\{"name":"…","code":"…","event":"…"\}) atau teks dengan pemisah <span class="font-mono">EVT|NAMA|KODE</span>. Kode willcard lain akan diproses sebagai <span class="font-mono">code</span> saja.</p>
+        <p id=\"scanHint\"$1</p>
+        <p id=\"permWarn\" class=\"text-xs mt-2 text-red-600 hidden\"></p>
       </article>
 
       <!-- Manual Entry Card -->
@@ -276,10 +277,12 @@
       $('#qr-reader').innerHTML = '';
       scanner = new Html5QrcodeScanner('qr-reader', {
         fps: 10,
-        qrbox: { width: Math.min(280, Math.floor(window.innerWidth*0.7)), height: Math.min(280, Math.floor(window.innerWidth*0.7)) },
+        qrbox: { width: Math.min(320, Math.floor(window.innerWidth*0.8)), height: Math.min(320, Math.floor(window.innerWidth*0.8)) },
         rememberLastUsedCamera: true,
         showTorchButtonIfSupported: true,
-        showZoomSliderIfSupported: true
+        showZoomSliderIfSupported: true,
+        supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA, Html5QrcodeScanType.SCAN_TYPE_FILE],
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true }
       }, false);
 
       scanner.render(onScanSuccess, onScanFailure);
@@ -396,7 +399,15 @@
       if (last.station) $('#station').value = last.station;
       renderTable('');
 
-      $('#startScanBtn').addEventListener('click', () => { persistMeta(); startScanner(); });
+      $('#startScanBtn').addEventListener('click', async () => {
+        persistMeta();
+        try {
+          await preflightCamera();
+          startScanner();
+        } catch (e) {
+          showPermWarning(e);
+        }
+      });
       $('#stopScanBtn').addEventListener('click', stopScanner);
 
       $('#saveManual').addEventListener('click', () => {
@@ -423,6 +434,32 @@
       const meta = { eventId: $('#eventId').value.trim(), operatorName: $('#operatorName').value.trim(), station: $('#station').value.trim() };
       localStorage.setItem('guestbook_meta', JSON.stringify(meta));
     }
+
+    // Preflight & Permission helpers
+    async function preflightCamera(){
+      const isLocalhost = ['localhost','127.0.0.1'].includes(location.hostname);
+      if (!window.isSecureContext && !isLocalhost) {
+        throw new Error('Akses kamera memerlukan HTTPS atau http://localhost');
+      }
+      if (!navigator.mediaDevices?.getUserMedia){
+        throw new Error('Browser tidak mendukung getUserMedia. Coba Chrome/Edge/Safari versi terbaru.');
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      stream.getTracks().forEach(t=>t.stop());
+    }
+
+    function showPermWarning(err){
+      const el = document.getElementById('permWarn');
+      const msg = (err && err.message) ? err.message : String(err);
+      if (el){
+        el.classList.remove('hidden');
+        el.textContent = 'Kamera tidak bisa diakses: ' + msg + '. Coba: 1) Buka via HTTPS atau http://localhost, 2) Izinkan kamera di pengaturan browser (Site settings > Camera), 3) Pastikan kamera tidak sedang dipakai aplikasi lain.';
+      } else {
+        alert('Kamera tidak bisa diakses: ' + msg);
+      }
+    
+      localStorage.setItem('guestbook_meta', JSON.stringify(meta));
+    };
   </script>
 </body>
 </html>
